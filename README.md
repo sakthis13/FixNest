@@ -5,6 +5,6 @@ prioritization, resolution tracking and maintenance analytics.
 
 ## Team
 
-- sakthi
-- sharu
-- tamil
+- sakthi -- ai module
+- sharu -- frontend
+- tamil -- backend
