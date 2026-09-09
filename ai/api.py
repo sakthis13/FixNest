@@ -6,22 +6,36 @@ from ai_pipeline import analyze_complaint
 
 def main():
 
-    if len(sys.argv) < 2:
+    # --------------------------------------------------------
+    # CHECK INPUT
+    # --------------------------------------------------------
+
+    if len(sys.argv) < 3:
 
         print(json.dumps({
-            "error": "No complaint provided"
+            "error": "Complaint and category are required"
         }))
 
         return
 
 
-    complaint = sys.argv[1]
+    # --------------------------------------------------------
+    # GET INPUT FROM PHP
+    # --------------------------------------------------------
 
+    complaint = sys.argv[1]
+    category = sys.argv[2]
+
+
+    # --------------------------------------------------------
+    # RUN AI ANALYSIS
+    # --------------------------------------------------------
 
     try:
 
         result = analyze_complaint(
-            complaint
+            complaint,
+            category
         )
 
         print(

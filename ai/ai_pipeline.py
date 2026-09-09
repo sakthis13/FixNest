@@ -10,34 +10,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 # BASE AI DIRECTORY
 # ============================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # ============================================================
-# 1. LOAD CATEGORY MODEL
-# ============================================================
-
-category_model = joblib.load(
-    os.path.join(
-        BASE_DIR,
-        "category",
-        "category_model.pkl"
-    )
-)
-
-category_vectorizer = joblib.load(
-    os.path.join(
-        BASE_DIR,
-        "category",
-        "category_vectorizer.pkl"
-    )
-)
-
-
-# ============================================================
-# 2. LOAD SEVERITY MODEL
+# 1. LOAD SEVERITY MODEL
 # ============================================================
 
 severity_model = joblib.load(
@@ -58,7 +35,7 @@ severity_vectorizer = joblib.load(
 
 
 # ============================================================
-# 3. LOAD HISTORICAL COMPLAINTS
+# 2. LOAD HISTORICAL COMPLAINTS
 # ============================================================
 
 historical_df = pd.read_csv(
@@ -70,12 +47,13 @@ historical_df = pd.read_csv(
 )
 
 historical_complaints = (
-    historical_df["complaint"].fillna("")
+    historical_df["complaint"]
+    .fillna("")
 )
 
 
 # ============================================================
-# 4. CREATE TF-IDF FOR HISTORICAL COMPLAINTS
+# 3. CREATE TF-IDF FOR HISTORICAL COMPLAINTS
 # ============================================================
 
 similarity_vectorizer = TfidfVectorizer(
@@ -91,34 +69,27 @@ historical_tfidf = (
 
 
 # ============================================================
-# 5. MAIN AI FUNCTION
+# 4. MAIN AI FUNCTION
 # ============================================================
 
-def analyze_complaint(complaint):
+def analyze_complaint(complaint, category):
 
     # --------------------------------------------------------
-    # CATEGORY MODEL PREDICTION
+    # VALIDATION
     # --------------------------------------------------------
 
-    category_vector = (
-        category_vectorizer.transform(
-            [complaint]
+    complaint = str(complaint).strip()
+    category = str(category).strip()
+
+    if not complaint:
+        raise ValueError(
+            "Complaint cannot be empty."
         )
-    )
 
-    model_category = category_model.predict(
-        category_vector
-    )[0]
-
-    category_probabilities = (
-        category_model.predict_proba(
-            category_vector
-        )[0]
-    )
-
-    model_category_confidence = max(
-        category_probabilities
-    )
+    if not category:
+        raise ValueError(
+            "Category must be selected."
+        )
 
 
     # --------------------------------------------------------
@@ -163,14 +134,16 @@ def analyze_complaint(complaint):
 
 
     # --------------------------------------------------------
-    # FIND STRONG SIMILAR COMPLAINTS
+    # FIND SIMILAR COMPLAINTS
     # --------------------------------------------------------
 
     threshold = 0.45
 
     matching_indices = [
         i
-        for i, score in enumerate(similarity_scores)
+        for i, score in enumerate(
+            similarity_scores
+        )
         if score >= threshold
     ]
 
@@ -181,49 +154,8 @@ def analyze_complaint(complaint):
 
 
     # --------------------------------------------------------
-    # FINAL CATEGORY DECISION
-    #
-    # Strong historical similarity is trusted over a
-    # low-confidence category model prediction.
-    # --------------------------------------------------------
-
-    category = model_category
-    category_confidence = model_category_confidence
-
-    if matching_indices:
-
-        strongest_index = matching_indices[0]
-
-        strongest_similarity = similarity_scores[
-            strongest_index
-        ]
-
-        historical_category = (
-            historical_df.iloc[
-                strongest_index
-            ]["category"]
-        )
-
-        # Strong historical match
-        if strongest_similarity >= 0.45:
-
-            category = historical_category
-
-            category_confidence = (
-                strongest_similarity
-            )
-
-    else:
-
-        # If the classifier itself is not confident,
-        # don't present a random category as certain.
-        if model_category_confidence < 0.30:
-
-            category = "Unknown"
-
-
-    # --------------------------------------------------------
-    # GET SIMILAR COMPLAINTS FROM FINAL CATEGORY
+    # FILTER SIMILAR COMPLAINTS
+    # BY MANUALLY SELECTED CATEGORY
     # --------------------------------------------------------
 
     category_matches = []
@@ -231,7 +163,9 @@ def analyze_complaint(complaint):
     for i in matching_indices:
 
         historical_category = (
-            historical_df.iloc[i]["category"]
+            str(
+                historical_df.iloc[i]["category"]
+            ).strip()
         )
 
         if historical_category == category:
@@ -275,21 +209,19 @@ def analyze_complaint(complaint):
         "complaint":
             complaint,
 
+        # Category is NOT predicted by AI.
+        # It comes from the user's manual selection.
         "category":
             category,
-
-        "category_confidence":
-            round(
-                float(category_confidence),
-                3
-            ),
 
         "severity":
             severity,
 
         "severity_confidence":
             round(
-                float(severity_confidence),
+                float(
+                    severity_confidence
+                ),
                 3
             ),
 
@@ -305,27 +237,52 @@ def analyze_complaint(complaint):
 
 
 # ============================================================
-# 6. TEST
+# 5. LOCAL TEST
 # ============================================================
 
 if __name__ == "__main__":
 
     test_complaints = [
 
-        "My fan is running very slowly",
+        {
+            "complaint":
+                "My fan is running very slowly",
 
-        "The bathroom tap has very low water flow",
+            "category":
+                "Electrical"
+        },
 
-        "My room light keeps flickering",
+        {
+            "complaint":
+                "The bathroom tap has very low water flow",
 
-        "There is a problem with my chair"
+            "category":
+                "Plumbing & Drainage"
+        },
+
+        {
+            "complaint":
+                "My room light keeps flickering",
+
+            "category":
+                "Electrical"
+        },
+
+        {
+            "complaint":
+                "There is a problem with my chair",
+
+            "category":
+                "Furniture & Room Fixtures"
+        }
     ]
 
 
-    for complaint in test_complaints:
+    for item in test_complaints:
 
         result = analyze_complaint(
-            complaint
+            item["complaint"],
+            item["category"]
         )
 
         print("\n================================")
@@ -340,11 +297,6 @@ if __name__ == "__main__":
         print(
             "Category:",
             result["category"]
-        )
-
-        print(
-            "Category confidence:",
-            result["category_confidence"]
         )
 
         print(
