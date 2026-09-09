@@ -1,0 +1,10 @@
+complaint,category,room
+"Fan is running slowly","Electrical","A101"
+"Ceiling fan is very slow","Electrical","A101"
+"Fan speed is very low","Electrical","A102"
+"My fan is barely rotating","Electrical","A103"
+"Room light is flickering","Electrical","B201"
+"Light keeps blinking","Electrical","B202"
+"Bathroom tap has low water flow","Plumbing & Drainage","C301"
+"Water flow from bathroom tap is very low","Plumbing & Drainage","C302"
+"Bathroom tap is giving very little water","Plumbing & Drainage","C301"
