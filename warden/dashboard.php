@@ -1,127 +1,124 @@
 <?php
 session_start();
 
-/*
-|--------------------------------------------------------------------------
-| Warden Login Details
-|--------------------------------------------------------------------------
-| Boys Warden:
-| username: boyswarden
-| password: boys123
-|
-| Girls Warden:
-| username: girlswarden
-| password: girls123
-|--------------------------------------------------------------------------
-*/
+require_once __DIR__ . "/../includes/db.php";
 
-$warden_username = $_SESSION["username"] ?? "boyswarden";
-$warden_role = $_SESSION["role"] ?? "warden";
+$warden_username = $_SESSION["username"] ?? "";
+$warden_role = $_SESSION["role"] ?? "";
 
 if ($warden_role !== "warden") {
     header("Location: ../index.php");
-    exit;
+    exit();
 }
+
+
 
 /*
 |--------------------------------------------------------------------------
-| Warden Hostel Type
-|--------------------------------------------------------------------------
-| Login session-la hostel_type set pannirundha adha use pannum.
-| Illana username base panni identify pannum.
+| Warden Hostel
 |--------------------------------------------------------------------------
 */
 
-if (isset($_SESSION["hostel_type"])) {
-    $warden_hostel = $_SESSION["hostel_type"];
-} else {
+$warden_hostel = $_SESSION["hostel_type"] ?? "";
+
+if ($warden_hostel === "") {
     if ($warden_username === "girlswarden") {
         $warden_hostel = "Girls Hostel";
     } else {
         $warden_hostel = "Boys Hostel";
     }
 }
-
 /*
 |--------------------------------------------------------------------------
-| Demo Complaints
-|--------------------------------------------------------------------------
-| Backend/database connect pannumbodhu indha array-ku badhila DB data use
-| pannalam.
+| Update complaint
 |--------------------------------------------------------------------------
 */
 
-$complaints = [
-    [
-        "id" => 1,
-        "student" => "Student User",
-        "hostel" => "Boys Hostel",
-        "location" => "Room 204",
-        "category" => "Electrical",
-        "description" => "Room fan is not working properly.",
-        "priority" => "High",
-        "status" => "To-do",
-        "date" => "06 Sep 2026"
-    ],
-    [
-        "id" => 2,
-        "student" => "Arun Kumar",
-        "hostel" => "Girls Hostel",
-        "location" => "Common Bathroom - 2nd Floor",
-        "category" => "Plumbing",
-        "description" => "Water leakage in the common bathroom.",
-        "priority" => "Urgent",
-        "status" => "In Progress",
-        "date" => "06 Sep 2026"
-    ],
-    [
-        "id" => 3,
-        "student" => "Karthik",
-        "hostel" => "Boys Hostel",
-        "location" => "Lobby - Ground Floor",
-        "category" => "Cleaning",
-        "description" => "Lobby cleaning is required.",
-        "priority" => "Low",
-        "status" => "Complete",
-        "date" => "05 Sep 2026"
-    ],
-    [
-        "id" => 4,
-        "student" => "Priya",
-        "hostel" => "Girls Hostel",
-        "location" => "Study Hall",
-        "category" => "Furniture",
-        "description" => "Study table is damaged.",
-        "priority" => "Medium",
-        "status" => "To-do",
-        "date" => "05 Sep 2026"
-    ],
-    [
-        "id" => 5,
-        "student" => "Rahul",
-        "hostel" => "Boys Hostel",
-        "location" => "Room 105",
-        "category" => "Water",
-        "description" => "No water supply in the room.",
-        "priority" => "Urgent",
-        "status" => "In Progress",
-        "date" => "04 Sep 2026"
-    ]
-];
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    $complaint_id = trim($_POST["complaint_id"] ?? "");
+    $new_severity = trim($_POST["priority"] ?? "");
+    $new_status = trim($_POST["status"] ?? "");
+
+    $allowed_severities = ["Low", "Medium", "High"];
+    $allowed_statuses = [
+        "Pending",
+        "In Progress",
+        "Resolved",
+        "Rejected"
+    ];
+
+    if (
+        $complaint_id !== "" &&
+        in_array($new_severity, $allowed_severities, true) &&
+        in_array($new_status, $allowed_statuses, true)
+    ) {
+
+        $update_sql = "UPDATE complaints
+                       SET severity = :severity,
+                           status = :status,
+                           updated_at = CURRENT_TIMESTAMP
+                       WHERE complaint_id = :complaint_id
+                         AND hostel = :hostel";
+
+        $update_stmt = $pdo->prepare($update_sql);
+
+        $update_stmt->execute([
+            ":severity" => $new_severity,
+            ":status" => $new_status,
+            ":complaint_id" => $complaint_id,
+            ":hostel" => $warden_hostel
+        ]);
+    }
+
+    /*
+     * Redirect after update so refreshing the page
+     * does not submit the form again.
+     */
+    header("Location: dashboard.php");
+    exit();
+}
 
 /*
 |--------------------------------------------------------------------------
-| Show only logged-in warden hostel complaints
+| Get complaints from PostgreSQL
 |--------------------------------------------------------------------------
 */
 
 $hostel_complaints = [];
 
-foreach ($complaints as $complaint) {
-    if ($complaint["hostel"] === $warden_hostel) {
-        $hostel_complaints[] = $complaint;
-    }
-}
+$sql = "SELECT
+            c.complaint_id,
+            c.student_id,
+            s.student_name,
+            c.hostel,
+            c.location_type,
+            c.room_number,
+            c.floor_number,
+            c.category,
+            c.description,
+            c.severity,
+            c.status,
+            c.created_at
+        FROM complaints c
+        LEFT JOIN students s
+            ON c.student_id = s.student_id
+        WHERE c.hostel = :hostel
+        ORDER BY c.created_at DESC";
+
+$stmt = $pdo->prepare($sql);
+
+$stmt->execute([
+    ":hostel" => $warden_hostel
+]);
+
+$hostel_complaints = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/*
+|--------------------------------------------------------------------------
+| Filters
+|--------------------------------------------------------------------------
+*/
 
 $selected_priority = $_GET["priority"] ?? "All";
 $selected_status = $_GET["status"] ?? "All";
@@ -129,9 +126,10 @@ $selected_status = $_GET["status"] ?? "All";
 $filtered_complaints = [];
 
 foreach ($hostel_complaints as $complaint) {
+
     $priority_match =
         $selected_priority === "All" ||
-        $complaint["priority"] === $selected_priority;
+        $complaint["severity"] === $selected_priority;
 
     $status_match =
         $selected_status === "All" ||
@@ -142,13 +140,21 @@ foreach ($hostel_complaints as $complaint) {
     }
 }
 
+/*
+|--------------------------------------------------------------------------
+| Dashboard counts
+|--------------------------------------------------------------------------
+*/
+
 $total_complaints = count($hostel_complaints);
+
 $todo_count = 0;
 $progress_count = 0;
 $complete_count = 0;
 
 foreach ($hostel_complaints as $complaint) {
-    if ($complaint["status"] === "To-do") {
+
+    if ($complaint["status"] === "Pending") {
         $todo_count++;
     }
 
@@ -156,7 +162,7 @@ foreach ($hostel_complaints as $complaint) {
         $progress_count++;
     }
 
-    if ($complaint["status"] === "Complete") {
+    if ($complaint["status"] === "Resolved") {
         $complete_count++;
     }
 }
@@ -499,6 +505,20 @@ foreach ($hostel_complaints as $complaint) {
             font-size: 13px;
             font-weight: 700;
         }
+        .view-btn {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            padding: 8px 13px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .view-btn:hover {
+            background: #1d4ed8;
+        }
 
         .empty-state {
             padding: 55px 20px;
@@ -602,13 +622,15 @@ foreach ($hostel_complaints as $complaint) {
 
             <div class="stat-card stat-blue">
                 <div class="stat-label">Total Complaints</div>
+
                 <div class="stat-number">
                     <?php echo $total_complaints; ?>
                 </div>
             </div>
 
             <div class="stat-card stat-orange">
-                <div class="stat-label">To-do</div>
+                <div class="stat-label">Pending</div>
+
                 <div class="stat-number">
                     <?php echo $todo_count; ?>
                 </div>
@@ -616,13 +638,15 @@ foreach ($hostel_complaints as $complaint) {
 
             <div class="stat-card stat-purple">
                 <div class="stat-label">In Progress</div>
+
                 <div class="stat-number">
                     <?php echo $progress_count; ?>
                 </div>
             </div>
 
             <div class="stat-card stat-green">
-                <div class="stat-label">Complete</div>
+                <div class="stat-label">Resolved</div>
+
                 <div class="stat-number">
                     <?php echo $complete_count; ?>
                 </div>
@@ -630,92 +654,172 @@ foreach ($hostel_complaints as $complaint) {
 
         </section>
 
+        <!-- Filter Section -->
+
         <section class="filter-card">
-            <div class="filter-title">Filter Complaints</div>
+
+            <div class="filter-title">
+                Filter Complaints
+            </div>
 
             <form class="filter-form" method="GET">
 
+                <!-- Priority Filter -->
+
                 <div class="form-group">
-                    <label for="priority">Priority</label>
+
+                    <label for="priority">
+                        Priority
+                    </label>
 
                     <select name="priority" id="priority">
-                        <option value="All" <?php echo $selected_priority === "All" ? "selected" : ""; ?>>
+
+                        <option
+                            value="All"
+                            <?php echo $selected_priority === "All" ? "selected" : ""; ?>
+                        >
                             All Priorities
                         </option>
 
-                        <option value="Urgent" <?php echo $selected_priority === "Urgent" ? "selected" : ""; ?>>
-                            Urgent
-                        </option>
-
-                        <option value="High" <?php echo $selected_priority === "High" ? "selected" : ""; ?>>
+                        <option
+                            value="High"
+                            <?php echo $selected_priority === "High" ? "selected" : ""; ?>
+                        >
                             High
                         </option>
 
-                        <option value="Medium" <?php echo $selected_priority === "Medium" ? "selected" : ""; ?>>
+                        <option
+                            value="Medium"
+                            <?php echo $selected_priority === "Medium" ? "selected" : ""; ?>
+                        >
                             Medium
                         </option>
 
-                        <option value="Low" <?php echo $selected_priority === "Low" ? "selected" : ""; ?>>
+                        <option
+                            value="Low"
+                            <?php echo $selected_priority === "Low" ? "selected" : ""; ?>
+                        >
                             Low
                         </option>
+
                     </select>
+
                 </div>
 
+
+                <!-- Status Filter -->
+
                 <div class="form-group">
-                    <label for="status">Complaint Status</label>
+
+                    <label for="status">
+                        Complaint Status
+                    </label>
 
                     <select name="status" id="status">
-                        <option value="All" <?php echo $selected_status === "All" ? "selected" : ""; ?>>
+
+                        <option
+                            value="All"
+                            <?php echo $selected_status === "All" ? "selected" : ""; ?>
+                        >
                             All Status
                         </option>
 
-                        <option value="To-do" <?php echo $selected_status === "To-do" ? "selected" : ""; ?>>
-                            To-do
+                        <option
+                            value="Pending"
+                            <?php echo $selected_status === "Pending" ? "selected" : ""; ?>
+                        >
+                            Pending
                         </option>
 
-                        <option value="In Progress" <?php echo $selected_status === "In Progress" ? "selected" : ""; ?>>
+                        <option
+                            value="In Progress"
+                            <?php echo $selected_status === "In Progress" ? "selected" : ""; ?>
+                        >
                             In Progress
                         </option>
 
-                        <option value="Complete" <?php echo $selected_status === "Complete" ? "selected" : ""; ?>>
-                            Complete
+                        <option
+                            value="Resolved"
+                            <?php echo $selected_status === "Resolved" ? "selected" : ""; ?>
+                        >
+                            Resolved
                         </option>
+
+                        <option
+                            value="Rejected"
+                            <?php echo $selected_status === "Rejected" ? "selected" : ""; ?>
+                        >
+                            Rejected
+                        </option>
+
                     </select>
+
                 </div>
 
+
+                <!-- Filter Buttons -->
+
                 <div>
-                    <button class="filter-btn" type="submit">
+
+                    <button
+                        class="filter-btn"
+                        type="submit"
+                    >
                         Apply Filter
                     </button>
 
-                    <a class="reset-btn" href="dashboard.php">
+                    <a
+                        class="reset-btn"
+                        href="dashboard.php"
+                    >
                         Reset
                     </a>
+
                 </div>
 
             </form>
+
         </section>
+
+
+        <!-- Complaints Section -->
 
         <section class="complaints-card">
 
             <div class="complaints-header">
+
                 <div>
-                    <h2><?php echo htmlspecialchars($warden_hostel); ?> Complaints</h2>
+
+                    <h2>
+                        <?php echo htmlspecialchars($warden_hostel); ?>
+                        Complaints
+                    </h2>
 
                     <p>
-                        Showing <?php echo count($filtered_complaints); ?>
+                        Showing
+                        <?php echo count($filtered_complaints); ?>
                         complaint(s) based on selected filters.
                     </p>
+
                 </div>
+
             </div>
+
 
             <div class="complaint-list">
 
                 <?php if (count($filtered_complaints) === 0): ?>
 
                     <div class="empty-state">
-                        <h3>No complaints found</h3>
-                        <p>No complaints match the selected priority or status.</p>
+
+                        <h3>
+                            No complaints found
+                        </h3>
+
+                        <p>
+                            No complaints match the selected priority or status.
+                        </p>
+
                     </div>
 
                 <?php else: ?>
@@ -723,15 +827,81 @@ foreach ($hostel_complaints as $complaint) {
                     <?php foreach ($filtered_complaints as $complaint): ?>
 
                         <?php
-                        $priority_class = strtolower($complaint["priority"]);
 
-                        if ($complaint["status"] === "To-do") {
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Priority / Severity
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $priority_class =
+                            strtolower($complaint["severity"]);
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Status Badge
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if ($complaint["status"] === "Pending") {
+
                             $status_class = "status-todo";
+
                         } elseif ($complaint["status"] === "In Progress") {
+
                             $status_class = "status-progress";
-                        } else {
+
+                        } elseif ($complaint["status"] === "Resolved") {
+
                             $status_class = "status-complete";
+
+                        } else {
+
+                            $status_class = "status-rejected";
+
                         }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Location
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if (!empty($complaint["room_number"])) {
+
+                            $location =
+                                $complaint["location_type"] .
+                                " - Room " .
+                                $complaint["room_number"];
+
+                        } elseif (!empty($complaint["floor_number"])) {
+
+                            $location =
+                                $complaint["location_type"] .
+                                " - Floor " .
+                                $complaint["floor_number"];
+
+                        } else {
+
+                            $location =
+                                $complaint["location_type"];
+
+                        }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Date
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $date = date(
+                            "d M Y",
+                            strtotime($complaint["created_at"])
+                        );
+
                         ?>
 
                         <article class="complaint-item">
@@ -739,87 +909,245 @@ foreach ($hostel_complaints as $complaint) {
                             <div class="complaint-top">
 
                                 <div>
+
                                     <div class="complaint-title">
-                                        #<?php echo $complaint["id"]; ?>
+
+                                        #
+
+                                        <?php
+                                        echo htmlspecialchars(
+                                            $complaint["complaint_id"]
+                                        );
+                                        ?>
+
                                         -
-                                        <?php echo htmlspecialchars($complaint["category"]); ?>
+
+                                        <?php
+                                        echo htmlspecialchars(
+                                            $complaint["category"]
+                                        );
+                                        ?>
+
                                     </div>
+
 
                                     <div class="complaint-meta">
-                                        <strong>Student:</strong>
-                                        <?php echo htmlspecialchars($complaint["student"]); ?>
+
+                                        <strong>
+                                            Student:
+                                        </strong>
+
+                                        <?php
+
+                                        echo htmlspecialchars(
+                                            $complaint["student_name"]
+                                            ?? $complaint["student_id"]
+                                        );
+
+                                        ?>
+
                                         <br>
 
-                                        <strong>Location:</strong>
-                                        <?php echo htmlspecialchars($complaint["location"]); ?>
+
+                                        <strong>
+                                            Location:
+                                        </strong>
+
+                                        <?php
+                                        echo htmlspecialchars($location);
+                                        ?>
+
                                         <br>
 
-                                        <strong>Date:</strong>
-                                        <?php echo htmlspecialchars($complaint["date"]); ?>
+
+                                        <strong>
+                                            Date:
+                                        </strong>
+
+                                        <?php
+                                        echo htmlspecialchars($date);
+                                        ?>
+
                                     </div>
+
                                 </div>
+
 
                                 <div class="badges">
-                                    <span class="badge priority-<?php echo $priority_class; ?>">
-                                        <?php echo htmlspecialchars($complaint["priority"]); ?>
+
+                                    <span
+                                        class="badge priority-<?php
+                                            echo htmlspecialchars(
+                                                $priority_class
+                                            );
+                                        ?>"
+                                    >
+
+                                        <?php
+                                        echo htmlspecialchars(
+                                            $complaint["severity"]
+                                        );
+                                        ?>
+
                                     </span>
 
-                                    <span class="badge <?php echo $status_class; ?>">
-                                        <?php echo htmlspecialchars($complaint["status"]); ?>
+
+                                    <span
+                                        class="badge <?php
+                                            echo htmlspecialchars(
+                                                $status_class
+                                            );
+                                        ?>"
+                                    >
+
+                                        <?php
+                                        echo htmlspecialchars(
+                                            $complaint["status"]
+                                        );
+                                        ?>
+
                                     </span>
+
                                 </div>
 
                             </div>
 
+
                             <div class="complaint-description">
-                                <?php echo htmlspecialchars($complaint["description"]); ?>
+
+                                <?php
+                                echo htmlspecialchars(
+                                    $complaint["description"]
+                                );
+                                ?>
+
                             </div>
+
+
+                            <!-- Update Complaint -->
 
                             <div class="complaint-actions">
 
-                                <form class="update-form" method="POST">
+                                <form
+                                    class="update-form"
+                                    method="POST"
+                                >
 
                                     <input
                                         type="hidden"
                                         name="complaint_id"
-                                        value="<?php echo $complaint["id"]; ?>"
+                                        value="<?php
+                                            echo htmlspecialchars(
+                                                $complaint["complaint_id"]
+                                            );
+                                        ?>"
                                     >
 
-                                    <select name="priority">
-                                        <option value="Urgent" <?php echo $complaint["priority"] === "Urgent" ? "selected" : ""; ?>>
-                                            Urgent Priority
-                                        </option>
 
-                                        <option value="High" <?php echo $complaint["priority"] === "High" ? "selected" : ""; ?>>
+                                    <!-- Priority -->
+
+                                    <select name="priority">
+
+                                        <option
+                                            value="High"
+                                            <?php
+                                            echo $complaint["severity"] === "High"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
                                             High Priority
                                         </option>
 
-                                        <option value="Medium" <?php echo $complaint["priority"] === "Medium" ? "selected" : ""; ?>>
+                                        <option
+                                            value="Medium"
+                                            <?php
+                                            echo $complaint["severity"] === "Medium"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
                                             Medium Priority
                                         </option>
 
-                                        <option value="Low" <?php echo $complaint["priority"] === "Low" ? "selected" : ""; ?>>
+                                        <option
+                                            value="Low"
+                                            <?php
+                                            echo $complaint["severity"] === "Low"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
                                             Low Priority
                                         </option>
+
                                     </select>
 
+
+                                    <!-- Status -->
+
                                     <select name="status">
-                                        <option value="To-do" <?php echo $complaint["status"] === "To-do" ? "selected" : ""; ?>>
-                                            To-do
+
+                                        <option
+                                            value="Pending"
+                                            <?php
+                                            echo $complaint["status"] === "Pending"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
+                                            Pending
                                         </option>
 
-                                        <option value="In Progress" <?php echo $complaint["status"] === "In Progress" ? "selected" : ""; ?>>
+                                        <option
+                                            value="In Progress"
+                                            <?php
+                                            echo $complaint["status"] === "In Progress"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
                                             In Progress
                                         </option>
 
-                                        <option value="Complete" <?php echo $complaint["status"] === "Complete" ? "selected" : ""; ?>>
-                                            Complete
+                                        <option
+                                            value="Resolved"
+                                            <?php
+                                            echo $complaint["status"] === "Resolved"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
+                                            Resolved
                                         </option>
+
+                                        <option
+                                            value="Rejected"
+                                            <?php
+                                            echo $complaint["status"] === "Rejected"
+                                                ? "selected"
+                                                : "";
+                                            ?>
+                                        >
+                                            Rejected
+                                        </option>
+
                                     </select>
 
-                                    <button class="update-btn" type="submit">
+
+                                    <button
+                                        class="update-btn"
+                                        type="submit"
+                                    >
                                         Update
                                     </button>
+                                    <a
+        href="complaint-details.php?complaint_id=<?php echo urlencode($complaint["complaint_id"]); ?>"
+        class="view-btn"
+    >
+        View
+    </a>
+
 
                                 </form>
 

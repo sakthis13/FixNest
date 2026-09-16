@@ -1,9 +1,42 @@
 <?php
 session_start();
 
+require_once __DIR__ . "/../includes/db.php";
+
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
     header("Location: ../index.php");
     exit();
+}
+
+$student_id = $_SESSION["student_id"] ?? "";
+
+$complaints = [];
+
+if ($student_id !== "") {
+
+    $sql = "SELECT
+                complaint_id,
+                hostel,
+                location_type,
+                room_number,
+                floor_number,
+                category,
+                description,
+                severity,
+                recurring,
+                similar_count,
+                status,
+                created_at
+            FROM complaints
+            WHERE student_id = :student_id
+            ORDER BY created_at DESC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ":student_id" => $student_id
+    ]);
+
+    $complaints = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -261,73 +294,97 @@ if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
 
                 <tbody>
 
-                    <tr>
-                        <td>FX-1024</td>
-                        <td>B-204</td>
-                        <td>Plumbing</td>
-                        <td>Water leakage in bathroom</td>
-                        <td>
-                            <span class="priority-high">High</span>
-                        </td>
-                        <td>
-                            <span class="status progress">In Progress</span>
-                        </td>
-                        <td>06 Sep 2026</td>
-                        <td>
-                            <a
-                                href="complaint-details.php?complaint_id=FX-1024"
-                                class="view-btn"
-                            >
-                                View
-                            </a>
-                        </td>
-                    </tr>
+<?php if (empty($complaints)): ?>
 
-                    <tr>
-                        <td>FX-1025</td>
-                        <td>B-204</td>
-                        <td>Electrical</td>
-                        <td>Tube light not working</td>
-                        <td>
-                            <span class="priority-medium">Medium</span>
-                        </td>
-                        <td>
-                            <span class="status pending">Pending</span>
-                        </td>
-                        <td>05 Sep 2026</td>
-                        <td>
-                            <a
-                                href="complaint-details.php?complaint_id=FX-1025"
-                                class="view-btn"
-                            >
-                                View
-                            </a>
-                        </td>
-                    </tr>
+    <tr>
+        <td colspan="8" style="text-align: center;">
+            No complaints found.
+        </td>
+    </tr>
 
-                    <tr>
-                        <td>FX-1026</td>
-                        <td>B-204</td>
-                        <td>Carpentry</td>
-                        <td>Broken cupboard door</td>
-                        <td>
-                            <span class="priority-medium">Medium</span>
-                        </td>
-                        <td>
-                            <span class="status resolved">Resolved</span>
-                        </td>
-                        <td>02 Sep 2026</td>
-                        <td>
-                            <a
-                                href="complaint-details.php?complaint_id=FX-1026"
-                                class="view-btn"
-                            >
-                                View
-                            </a>
-                        </td>
-                    </tr>
+<?php else: ?>
 
-                </tbody>
+    <?php foreach ($complaints as $complaint): ?>
+
+        <?php
+        $priority_class = "priority-" . strtolower($complaint["severity"]);
+
+        $status_class = "";
+
+        if ($complaint["status"] === "Pending") {
+            $status_class = "pending";
+        } elseif ($complaint["status"] === "In Progress") {
+            $status_class = "progress";
+        } elseif ($complaint["status"] === "Resolved") {
+            $status_class = "resolved";
+        } elseif ($complaint["status"] === "Rejected") {
+            $status_class = "rejected";
+        }
+
+        if ($complaint["room_number"] !== null && $complaint["room_number"] !== "") {
+            $room = $complaint["room_number"];
+        } elseif ($complaint["floor_number"] !== null && $complaint["floor_number"] !== "") {
+            $room = "Floor " . $complaint["floor_number"];
+        } else {
+            $room = "-";
+        }
+
+        $date = date(
+            "d M Y",
+            strtotime($complaint["created_at"])
+        );
+        ?>
+
+        <tr>
+
+            <td>
+                <?= htmlspecialchars($complaint["complaint_id"]) ?>
+            </td>
+
+            <td>
+                <?= htmlspecialchars($room) ?>
+            </td>
+
+            <td>
+                <?= htmlspecialchars($complaint["category"]) ?>
+            </td>
+
+            <td>
+                <?= htmlspecialchars($complaint["description"]) ?>
+            </td>
+
+            <td>
+                <span class="<?= htmlspecialchars($priority_class) ?>">
+                    <?= htmlspecialchars($complaint["severity"]) ?>
+                </span>
+            </td>
+
+            <td>
+                <span class="status <?= htmlspecialchars($status_class) ?>">
+                    <?= htmlspecialchars($complaint["status"]) ?>
+                </span>
+            </td>
+
+            <td>
+                <?= htmlspecialchars($date) ?>
+            </td>
+
+            <td>
+                <a
+                    href="complaint-details.php?complaint_id=<?= urlencode($complaint["complaint_id"]) ?>"
+                    class="view-btn"
+                >
+                    View
+                </a>
+            </td>
+
+        </tr>
+
+    <?php endforeach; ?>
+
+<?php endif; ?>
+
+</tbody>
             </table>
 
             <div id="emptyMessage" class="empty-message">

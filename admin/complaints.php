@@ -1,508 +1,1174 @@
 <?php
+
 session_start();
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "admin") {
     header("Location: ../index.php");
     exit();
 }
+
+require_once __DIR__ . "/../includes/db.php";
+
+
+/*
+|--------------------------------------------------------------------------
+| FETCH ALL COMPLAINTS
+|--------------------------------------------------------------------------
+*/
+
+try {
+
+    $sql = "
+        SELECT
+            c.complaint_id,
+            c.student_id,
+            s.student_name,
+
+            c.hostel,
+            c.location_type,
+            c.room_number,
+            c.floor_number,
+
+            c.category,
+            c.description,
+            c.severity,
+            c.severity_confidence,
+
+            c.recurring,
+            c.similar_count,
+
+            c.status,
+            c.review_decision,
+            c.warden_remarks,
+
+            c.worker_name,
+            c.assigned_worker,
+            c.maintenance_status,
+            c.maintenance_remarks,
+            c.maintenance_updated_at,
+
+            c.created_at,
+            c.updated_at
+
+        FROM complaints c
+
+        LEFT JOIN students s
+            ON c.student_id = s.student_id
+
+        ORDER BY c.created_at DESC
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+
+    $complaints = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (PDOException $e) {
+
+    die(
+        "Database Error: "
+        . htmlspecialchars($e->getMessage())
+    );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| STATISTICS
+|--------------------------------------------------------------------------
+*/
+
+$total_complaints = count($complaints);
+
+$pending = 0;
+$approved = 0;
+$rejected = 0;
+$resolved = 0;
+
+
+foreach ($complaints as $complaint) {
+
+    $decision = $complaint["review_decision"] ?? "";
+    $status = $complaint["status"] ?? "";
+
+    if ($decision === "Approved") {
+        $approved++;
+    }
+
+    if ($decision === "Rejected") {
+        $rejected++;
+    }
+
+    if (
+        $status === "Pending" ||
+        $status === "Not Started"
+    ) {
+        $pending++;
+    }
+
+    if ($status === "Resolved") {
+        $resolved++;
+    }
+
+}
+
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Complaints - FixNest Admin</title>
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Complaints | FixNest Admin</title>
+
 
     <style>
+
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
+
 
         body {
-            margin: 0;
+
             font-family: Arial, sans-serif;
-            background: #f3f4f6;
-            color: #111827;
+
+            background: #f4f7fb;
+
+            color: #1f2937;
         }
+
+
+        /* =========================
+           NAVBAR
+        ========================== */
 
         .navbar {
-            background: #111827;
+
+            height: 65px;
+
+            background: #1e3a8a;
+
             color: white;
-            padding: 18px 30px;
+
             display: flex;
+
+            align-items: center;
+
             justify-content: space-between;
-            align-items: center;
+
+            padding: 0 30px;
         }
 
-        .navbar h2 {
-            margin: 0;
+
+        .logo {
+
             font-size: 22px;
+
+            font-weight: bold;
         }
 
-        .nav-links {
+
+        .nav-right {
+
             display: flex;
-            gap: 20px;
+
             align-items: center;
+
+            gap: 15px;
         }
 
-        .nav-links a {
-            color: white;
-            text-decoration: none;
+
+        .admin-label {
+
             font-size: 14px;
+
+            opacity: 0.9;
         }
+
 
         .logout {
-            background: #dc2626;
-            padding: 9px 14px;
-            border-radius: 6px;
+
+            color: white;
+
+            text-decoration: none;
+
+            background: rgba(255,255,255,0.15);
+
+            padding: 9px 15px;
+
+            border-radius: 7px;
         }
 
+
+        .logout:hover {
+
+            background: rgba(255,255,255,0.25);
+        }
+
+
+        /* =========================
+           CONTAINER
+        ========================== */
+
         .container {
-            max-width: 1250px;
-            margin: 30px auto;
+
+            max-width: 1400px;
+
+            margin: 35px auto;
+
             padding: 0 20px;
         }
 
-        .page-header {
-            margin-bottom: 25px;
+
+        /* =========================
+           BACK
+        ========================== */
+
+        .back {
+
+            display: inline-block;
+
+            margin-bottom: 20px;
+
+            color: #2563eb;
+
+            text-decoration: none;
+
+            font-weight: 600;
         }
+
+
+        .back:hover {
+
+            text-decoration: underline;
+        }
+
+
+        /* =========================
+           HEADER
+        ========================== */
+
+        .page-header {
+
+            margin-bottom: 30px;
+        }
+
 
         .page-header h1 {
-            margin: 0 0 8px;
+
             font-size: 30px;
+
+            margin-bottom: 8px;
         }
+
 
         .page-header p {
-            margin: 0;
-            color: #6b7280;
+
+            color: #64748b;
+
+            font-size: 14px;
         }
 
-        .card {
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
-        }
 
-        .filters {
+        /* =========================
+           STATISTICS
+        ========================== */
+
+        .stats {
+
             display: grid;
-            grid-template-columns: 1.5fr 1fr 1fr auto;
-            gap: 12px;
+
+            grid-template-columns:
+                repeat(4, minmax(0, 1fr));
+
+            gap: 18px;
+
             margin-bottom: 25px;
         }
 
-        input,
-        select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            outline: none;
+
+        .stat-card {
+
+            background: white;
+
+            padding: 22px;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 3px 12px rgba(0,0,0,0.06);
         }
 
-        input:focus,
-        select:focus {
-            border-color: #2563eb;
+
+        .stat-title {
+
+            color: #64748b;
+
+            font-size: 13px;
+
+            margin-bottom: 10px;
         }
 
-        .btn {
-            border: none;
-            border-radius: 8px;
-            padding: 12px 17px;
-            font-size: 14px;
+
+        .stat-number {
+
+            font-size: 28px;
+
             font-weight: bold;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            white-space: nowrap;
+
+            color: #1e3a8a;
         }
 
-        .btn-primary {
-            background: #2563eb;
-            color: white;
-        }
 
-        .btn-primary:hover {
-            background: #1d4ed8;
-        }
+        /* =========================
+           CARD
+        ========================== */
 
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #374151;
-        }
+        .card {
 
-        .table-wrapper {
-            width: 100%;
+            background: white;
+
+            padding: 25px;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 3px 12px rgba(0,0,0,0.06);
+
             overflow-x: auto;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 900px;
+
+        .card h2 {
+
+            font-size: 20px;
+
+            margin-bottom: 20px;
         }
+
+
+        /* =========================
+           TABLE
+        ========================== */
+
+        table {
+
+            width: 100%;
+
+            min-width: 1150px;
+
+            border-collapse: collapse;
+        }
+
 
         th,
         td {
-            padding: 15px 12px;
+
+            padding: 13px;
+
             text-align: left;
+
             border-bottom: 1px solid #e5e7eb;
-            font-size: 14px;
+
+            font-size: 13px;
+
+            vertical-align: middle;
         }
+
 
         th {
-            background: #f9fafb;
-            color: #374151;
-            font-size: 13px;
+
+            background: #dbeafe;
+
+            color: #1e40af;
+
+            white-space: nowrap;
         }
 
-        tr:hover {
-            background: #f9fafb;
+
+        td {
+
+            color: #374151;
         }
+
+
+        tbody tr:hover {
+
+            background: #f8fafc;
+        }
+
+
+        /* =========================
+           BADGES
+        ========================== */
 
         .badge {
+
             display: inline-block;
-            padding: 6px 11px;
+
+            padding: 6px 10px;
+
             border-radius: 20px;
-            font-size: 12px;
+
+            font-size: 11px;
+
             font-weight: bold;
+
+            white-space: nowrap;
         }
 
-        .pending {
+
+        /* Severity */
+
+        .severity-high {
+
+            background: #fee2e2;
+
+            color: #b91c1c;
+        }
+
+
+        .severity-medium {
+
             background: #fef3c7;
+
             color: #92400e;
         }
 
-        .assigned {
-            background: #e0e7ff;
-            color: #3730a3;
-        }
 
-        .progress {
-            background: #dbeafe;
-            color: #1d4ed8;
-        }
+        .severity-low {
 
-        .resolved {
             background: #dcfce7;
+
             color: #166534;
         }
 
-        .high {
+
+        /* Decision */
+
+        .approved {
+
+            background: #dcfce7;
+
+            color: #166534;
+        }
+
+
+        .rejected {
+
             background: #fee2e2;
+
             color: #991b1b;
         }
 
-        .medium {
+
+        .pending {
+
             background: #fef3c7;
+
             color: #92400e;
         }
 
-        .low {
+
+        /* Status */
+
+        .status-progress {
+
+            background: #dbeafe;
+
+            color: #1d4ed8;
+        }
+
+
+        .status-resolved {
+
             background: #dcfce7;
+
             color: #166534;
         }
 
+
+        .status-pending {
+
+            background: #fef3c7;
+
+            color: #92400e;
+        }
+
+
+        .status-other {
+
+            background: #e5e7eb;
+
+            color: #374151;
+        }
+
+
+        /* =========================
+           ACTION BUTTON
+        ========================== */
+
+        .view-btn {
+
+            display: inline-block;
+
+            padding: 8px 12px;
+
+            background: #2563eb;
+
+            color: white;
+
+            text-decoration: none;
+
+            border-radius: 6px;
+
+            font-size: 12px;
+
+            font-weight: bold;
+
+            white-space: nowrap;
+        }
+
+
+        .view-btn:hover {
+
+            background: #1d4ed8;
+        }
+
+
+        /* =========================
+           EMPTY
+        ========================== */
+
         .empty {
+
             text-align: center;
-            padding: 35px;
-            color: #6b7280;
-            display: none;
+
+            padding: 45px;
+
+            color: #64748b;
+
+            font-size: 14px;
         }
 
-        @media (max-width: 800px) {
-            .filters {
-                grid-template-columns: 1fr 1fr;
-            }
 
-            .navbar {
-                padding: 16px;
-            }
+        /* =========================
+           INFO
+        ========================== */
 
-            .nav-links {
-                gap: 10px;
-            }
+        .info {
+
+            margin-top: 20px;
+
+            padding: 16px;
+
+            background: #eff6ff;
+
+            border-left: 4px solid #2563eb;
+
+            border-radius: 7px;
+
+            color: #1e40af;
+
+            font-size: 13px;
+
+            line-height: 1.6;
         }
 
-        @media (max-width: 500px) {
+
+        /* =========================
+           RESPONSIVE
+        ========================== */
+
+        @media (max-width: 900px) {
+
+            .stats {
+
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+
+            }
+
+        }
+
+
+        @media (max-width: 600px) {
+
             .navbar {
-                align-items: flex-start;
-                gap: 12px;
-                flex-direction: column;
-            }
 
-            .nav-links {
-                flex-wrap: wrap;
-            }
-
-            .filters {
-                grid-template-columns: 1fr;
-            }
-
-            .container {
                 padding: 0 15px;
             }
 
+
+            .admin-label {
+
+                display: none;
+            }
+
+
+            .container {
+
+                padding: 0 15px;
+            }
+
+
+            .stats {
+
+                grid-template-columns: 1fr;
+            }
+
+
             .page-header h1 {
+
                 font-size: 25px;
             }
+
         }
+
     </style>
+
 </head>
+
 
 <body>
 
-    <div class="navbar">
-        <h2>FixNest Admin</h2>
 
-        <div class="nav-links">
-            <a href="dashboard.php">Dashboard</a>
-            <a href="complaints.php">Complaints</a>
-            <a href="reports.php">Reports</a>
-            <a href="../logout.php" class="logout">Logout</a>
-        </div>
+<!-- =========================
+     NAVBAR
+========================== -->
+
+<nav class="navbar">
+
+    <div class="logo">
+        FixNest Admin
     </div>
 
-    <div class="container">
 
-        <div class="page-header">
-            <h1>Manage Complaints</h1>
-            <p>View, filter and manage all hostel complaints.</p>
-        </div>
+    <div class="nav-right">
 
-        <div class="card">
+        <span class="admin-label">
+            Administrator
+        </span>
 
-            <div class="filters">
 
-                <input
-                    type="text"
-                    id="searchInput"
-                    placeholder="Search by complaint ID, student or room..."
-                    onkeyup="filterComplaints()"
-                >
+        <a
+            href="../index.php"
+            class="logout"
+        >
+            Logout
+        </a>
 
-                <select id="statusFilter" onchange="filterComplaints()">
-                    <option value="">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Assigned">Assigned</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Resolved">Resolved</option>
-                </select>
+    </div>
 
-                <select id="priorityFilter" onchange="filterComplaints()">
-                    <option value="">All Priority</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                </select>
+</nav>
 
-                <button class="btn btn-secondary" onclick="clearFilters()">
-                    Clear
-                </button>
 
+
+<div class="container">
+
+
+    <!-- BACK -->
+
+    <a
+        href="dashboard.php"
+        class="back"
+    >
+        ← Back to Dashboard
+    </a>
+
+
+
+    <!-- HEADER -->
+
+    <div class="page-header">
+
+        <h1>
+            Complaints
+        </h1>
+
+        <p>
+            View and monitor complaints submitted through FixNest.
+        </p>
+
+    </div>
+
+
+
+    <!-- =========================
+         STATISTICS
+    ========================== -->
+
+    <div class="stats">
+
+
+        <div class="stat-card">
+
+            <div class="stat-title">
+                Total Complaints
             </div>
 
-            <div class="table-wrapper">
-
-                <table id="complaintTable">
-
-                    <thead>
-                        <tr>
-                            <th>Complaint ID</th>
-                            <th>Student</th>
-                            <th>Room</th>
-                            <th>Category</th>
-                            <th>Priority</th>
-                            <th>Status</th>
-                            <th>Created Date</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-
-                        <tr>
-                            <td>FX-1024</td>
-                            <td>Arun Kumar</td>
-                            <td>B-204</td>
-                            <td>Plumbing</td>
-                            <td>
-                                <span class="badge high">High</span>
-                            </td>
-                            <td>
-                                <span class="badge progress">In Progress</span>
-                            </td>
-                            <td>06 Sep 2026</td>
-                            <td>
-                                <a
-                                    href="complaint-details.php?complaint_id=FX-1024"
-                                    class="btn btn-primary"
-                                >
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>FX-1025</td>
-                            <td>Priya S</td>
-                            <td>A-112</td>
-                            <td>Electrical</td>
-                            <td>
-                                <span class="badge medium">Medium</span>
-                            </td>
-                            <td>
-                                <span class="badge assigned">Assigned</span>
-                            </td>
-                            <td>05 Sep 2026</td>
-                            <td>
-                                <a
-                                    href="complaint-details.php?complaint_id=FX-1025"
-                                    class="btn btn-primary"
-                                >
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>FX-1026</td>
-                            <td>Vignesh R</td>
-                            <td>C-306</td>
-                            <td>Carpentry</td>
-                            <td>
-                                <span class="badge medium">Medium</span>
-                            </td>
-                            <td>
-                                <span class="badge resolved">Resolved</span>
-                            </td>
-                            <td>04 Sep 2026</td>
-                            <td>
-                                <a
-                                    href="complaint-details.php?complaint_id=FX-1026"
-                                    class="btn btn-primary"
-                                >
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>FX-1027</td>
-                            <td>Divya M</td>
-                            <td>D-118</td>
-                            <td>Cleaning</td>
-                            <td>
-                                <span class="badge low">Low</span>
-                            </td>
-                            <td>
-                                <span class="badge pending">Pending</span>
-                            </td>
-                            <td>03 Sep 2026</td>
-                            <td>
-                                <a
-                                    href="complaint-details.php?complaint_id=FX-1027"
-                                    class="btn btn-primary"
-                                >
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>FX-1028</td>
-                            <td>Rahul K</td>
-                            <td>A-210</td>
-                            <td>Internet</td>
-                            <td>
-                                <span class="badge high">High</span>
-                            </td>
-                            <td>
-                                <span class="badge assigned">Assigned</span>
-                            </td>
-                            <td>02 Sep 2026</td>
-                            <td>
-                                <a
-                                    href="complaint-details.php?complaint_id=FX-1028"
-                                    class="btn btn-primary"
-                                >
-                                    View
-                                </a>
-                            </td>
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
-                <div class="empty" id="emptyMessage">
-                    No complaints found.
-                </div>
-
+            <div class="stat-number">
+                <?= htmlspecialchars($total_complaints) ?>
             </div>
 
         </div>
 
+
+        <div class="stat-card">
+
+            <div class="stat-title">
+                Approved
+            </div>
+
+            <div class="stat-number">
+                <?= htmlspecialchars($approved) ?>
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-title">
+                Pending
+            </div>
+
+            <div class="stat-number">
+                <?= htmlspecialchars($pending) ?>
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-title">
+                Resolved
+            </div>
+
+            <div class="stat-number">
+                <?= htmlspecialchars($resolved) ?>
+            </div>
+
+        </div>
+
+
     </div>
 
-    <script>
-        function filterComplaints() {
-            const searchValue = document
-                .getElementById("searchInput")
-                .value
-                .toLowerCase();
 
-            const statusValue = document
-                .getElementById("statusFilter")
-                .value
-                .toLowerCase();
 
-            const priorityValue = document
-                .getElementById("priorityFilter")
-                .value
-                .toLowerCase();
+    <!-- =========================
+         COMPLAINT TABLE
+    ========================== -->
 
-            const rows = document.querySelectorAll("#complaintTable tbody tr");
+    <div class="card">
 
-            let visibleCount = 0;
 
-            rows.forEach(function(row) {
-                const rowText = row.innerText.toLowerCase();
-                const statusText = row.children[5].innerText.toLowerCase();
-                const priorityText = row.children[4].innerText.toLowerCase();
+        <h2>
+            All Complaints
+        </h2>
 
-                const matchesSearch = rowText.includes(searchValue);
-                const matchesStatus =
-                    statusValue === "" || statusText.includes(statusValue);
-                const matchesPriority =
-                    priorityValue === "" || priorityText.includes(priorityValue);
 
-                if (
-                    matchesSearch &&
-                    matchesStatus &&
-                    matchesPriority
-                ) {
-                    row.style.display = "";
-                    visibleCount++;
-                } else {
-                    row.style.display = "none";
-                }
-            });
+        <?php if (empty($complaints)): ?>
 
-            document.getElementById("emptyMessage").style.display =
-                visibleCount === 0 ? "block" : "none";
-        }
 
-        function clearFilters() {
-            document.getElementById("searchInput").value = "";
-            document.getElementById("statusFilter").value = "";
-            document.getElementById("priorityFilter").value = "";
+            <div class="empty">
 
-            filterComplaints();
-        }
-    </script>
+                No complaints have been submitted yet.
+
+            </div>
+
+
+        <?php else: ?>
+
+
+            <table>
+
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Complaint ID
+                        </th>
+
+                        <th>
+                            Student
+                        </th>
+
+                        <th>
+                            Hostel
+                        </th>
+
+                        <th>
+                            Location
+                        </th>
+
+                        <th>
+                            Category
+                        </th>
+
+                        <th>
+                            Severity
+                        </th>
+
+                        <th>
+                            Warden Decision
+                        </th>
+
+                        <th>
+                            Status
+                        </th>
+
+                        <th>
+                            Created
+                        </th>
+
+                        <th>
+                            Action
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+
+                <?php foreach ($complaints as $complaint): ?>
+
+
+                    <?php
+
+                    /* Severity */
+
+                    $severity =
+                        $complaint["severity"]
+                        ?? "Medium";
+
+                    $severity_class =
+                        "severity-medium";
+
+                    if ($severity === "High") {
+
+                        $severity_class =
+                            "severity-high";
+
+                    } elseif ($severity === "Low") {
+
+                        $severity_class =
+                            "severity-low";
+
+                    }
+
+
+                    /* Decision */
+
+                    $decision =
+                        $complaint["review_decision"]
+                        ?? "Pending";
+
+                    $decision_class =
+                        "pending";
+
+                    if ($decision === "Approved") {
+
+                        $decision_class =
+                            "approved";
+
+                    } elseif ($decision === "Rejected") {
+
+                        $decision_class =
+                            "rejected";
+
+                    }
+
+
+                    /* Status */
+
+                    $status =
+                        $complaint["status"]
+                        ?? "Pending";
+
+                    $status_class =
+                        "status-other";
+
+                    if (
+                        $status === "Pending" ||
+                        $status === "Not Started"
+                    ) {
+
+                        $status_class =
+                            "status-pending";
+
+                    } elseif ($status === "In Progress") {
+
+                        $status_class =
+                            "status-progress";
+
+                    } elseif ($status === "Resolved") {
+
+                        $status_class =
+                            "status-resolved";
+
+                    }
+
+
+                    /* Location */
+
+                    $location_parts = [];
+
+
+                    if (!empty($complaint["room_number"])) {
+
+                        $location_parts[] =
+                            "Room " .
+                            $complaint["room_number"];
+
+                    }
+
+
+                    if (!empty($complaint["floor_number"])) {
+
+                        $location_parts[] =
+                            "Floor " .
+                            $complaint["floor_number"];
+
+                    }
+
+
+                    if (!empty($complaint["location_type"])) {
+
+                        $location_parts[] =
+                            $complaint["location_type"];
+
+                    }
+
+
+                    $location =
+                        !empty($location_parts)
+                        ? implode(" • ", $location_parts)
+                        : "-";
+
+                    ?>
+
+
+                    <tr>
+
+
+                        <!-- ID -->
+
+                        <td>
+
+                            <strong>
+
+                                <?= htmlspecialchars(
+                                    $complaint["complaint_id"]
+                                ) ?>
+
+                            </strong>
+
+                        </td>
+
+
+                        <!-- STUDENT -->
+
+                        <td>
+
+                            <?= htmlspecialchars(
+                                $complaint["student_name"]
+                                ?? "Unknown"
+                            ) ?>
+
+                            <br>
+
+                            <small style="color:#64748b;">
+
+                                ID:
+                                <?= htmlspecialchars(
+                                    $complaint["student_id"]
+                                ) ?>
+
+                            </small>
+
+                        </td>
+
+
+                        <!-- HOSTEL -->
+
+                        <td>
+
+                            <?= htmlspecialchars(
+                                $complaint["hostel"]
+                                ?? "-"
+                            ) ?>
+
+                        </td>
+
+
+                        <!-- LOCATION -->
+
+                        <td>
+
+                            <?= htmlspecialchars(
+                                $location
+                            ) ?>
+
+                        </td>
+
+
+                        <!-- CATEGORY -->
+
+                        <td>
+
+                            <?= htmlspecialchars(
+                                $complaint["category"]
+                                ?? "-"
+                            ) ?>
+
+                        </td>
+
+
+                        <!-- SEVERITY -->
+
+                        <td>
+
+                            <span
+                                class="badge
+                                <?= htmlspecialchars(
+                                    $severity_class
+                                ) ?>"
+                            >
+
+                                <?= htmlspecialchars(
+                                    $severity
+                                ) ?>
+
+                            </span>
+
+                        </td>
+
+
+                        <!-- DECISION -->
+
+                        <td>
+
+                            <span
+                                class="badge
+                                <?= htmlspecialchars(
+                                    $decision_class
+                                ) ?>"
+                            >
+
+                                <?= htmlspecialchars(
+                                    $decision
+                                ) ?>
+
+                            </span>
+
+                        </td>
+
+
+                        <!-- STATUS -->
+
+                        <td>
+
+                            <span
+                                class="badge
+                                <?= htmlspecialchars(
+                                    $status_class
+                                ) ?>"
+                            >
+
+                                <?= htmlspecialchars(
+                                    $status
+                                ) ?>
+
+                            </span>
+
+                        </td>
+
+
+                        <!-- CREATED -->
+
+                        <td>
+
+                            <?= htmlspecialchars(
+                                $complaint["created_at"]
+                                ?? "-"
+                            ) ?>
+
+                        </td>
+
+
+                        <!-- ACTION -->
+
+                        <td>
+
+                            <a
+                                href="complaint-details.php?complaint_id=<?= urlencode(
+                                    $complaint["complaint_id"]
+                                ) ?>"
+                                class="view-btn"
+                            >
+                                View Details
+                            </a>
+
+                        </td>
+
+
+                    </tr>
+
+
+                <?php endforeach; ?>
+
+
+                </tbody>
+
+
+            </table>
+
+
+        <?php endif; ?>
+
+
+    </div>
+
+
+
+    <!-- =========================
+         INFO
+    ========================== -->
+
+    <div class="info">
+
+        <strong>Admin monitoring:</strong>
+
+        The administrator can view complaint information
+        and monitor its progress. Warden decisions and
+        maintenance updates are handled by their respective
+        roles.
+
+    </div>
+
+
+</div>
+
 
 </body>
+
 </html>

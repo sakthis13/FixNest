@@ -1,13 +1,17 @@
 <?php
 session_start();
+require_once __DIR__ . "/../includes/db.php";
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
     header("Location: ../index.php");
     exit();
 }
+$student_id = $_SESSION["student_id"] ?? "";
+$hostel = $_SESSION["hostel_type"] ?? "";
 
 $success = "";
 $error = "";
+
 
 $location_type = "";
 $room_number = "";
@@ -33,10 +37,140 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     ) {
         $error = "Please select the floor number.";
     } else {
-        $complaint_id = "FX-" . rand(1000, 9999);
+      $complaint_id = "FX-" . date("ymdHis") . rand(10, 99);
 
-        $success = "Complaint submitted successfully! Your Complaint ID is " . $complaint_id;
+$python = "C:\\Users\\SAKTHI S\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
 
+$api_path = realpath(__DIR__ . "/../ai/api.py");
+
+$descriptorspec = [
+    0 => ["pipe", "r"],
+    1 => ["pipe", "w"],
+    2 => ["pipe", "w"]
+];
+
+$process = proc_open(
+    [
+        $python,
+        $api_path,
+        $description,
+        $category
+    ],
+    $descriptorspec,
+    $pipes,
+    dirname($api_path)
+);
+
+if (is_resource($process)) {
+
+    fclose($pipes[0]);
+
+    $ai_output = stream_get_contents($pipes[1]);
+    $ai_error = stream_get_contents($pipes[2]);
+
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+
+    $return_code = proc_close($process);
+
+    if ($return_code !== 0) {
+
+        $error = "AI execution failed: " . $ai_error;
+
+    } else {
+
+        $ai_result = json_decode($ai_output, true);
+
+        if ($ai_result === null) {
+
+            $error = "AI returned invalid JSON: " . $ai_output;
+
+        }
+    }
+
+} else {
+
+    $error = "Could not start Python AI.";
+}
+
+if (isset($ai_result["error"])) {
+
+    $error = "AI Error: " . $ai_result["error"];
+
+} elseif ($ai_result === null) {
+
+    $error = "Could not get a valid response from AI.";
+
+} else {
+
+    try {
+        $recurring = filter_var(
+            $ai_result["recurring"] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+);
+
+        $sql = "INSERT INTO complaints (
+                    complaint_id,
+                    student_id,
+                    hostel,
+                    location_type,
+                    room_number,
+                    floor_number,
+                    category,
+                    description,
+                    severity,
+                    severity_confidence,
+                    recurring,
+                    similar_count
+                )
+                VALUES (
+                    :complaint_id,
+                    :student_id,
+                    :hostel,
+                    :location_type,
+                    :room_number,
+                    :floor_number,
+                    :category,
+                    :description,
+                    :severity,
+                    :severity_confidence,
+                    :recurring,
+                    :similar_count
+                )";
+
+        $stmt = $pdo->prepare($sql);
+
+        $stmt->execute([
+            ":complaint_id" => $complaint_id,
+            ":student_id" => $student_id,
+            ":hostel" => $hostel,
+            ":location_type" => $location_type,
+            ":room_number" => $room_number !== "" ? $room_number : null,
+            ":floor_number" => $floor_number !== "" ? $floor_number : null,
+            ":category" => $category,
+            ":description" => $description,
+            ":severity" => $ai_result["severity"],
+            ":severity_confidence" => $ai_result["severity_confidence"],
+           ":recurring" => $recurring ? "true" : "false",
+            ":similar_count" => $ai_result["similar_count"]
+        ]);
+
+        $success =
+            "Complaint submitted successfully!<br>" .
+            "Complaint ID: " . htmlspecialchars($complaint_id) . "<br>" .
+            "Category: " . htmlspecialchars($category) . "<br>" .
+            "Severity: " . htmlspecialchars($ai_result["severity"]) . "<br>" .
+            "Recurring: " .
+            ($ai_result["recurring"] ? "Yes" : "No") .
+            "<br>" .
+            "Similar complaints: " .
+            htmlspecialchars($ai_result["similar_count"]);
+
+    } catch (PDOException $e) {
+
+        $error = "Complaint could not be saved: " . $e->getMessage();
+    }
+}
         $location_type = "";
         $room_number = "";
         $floor_number = "";
@@ -284,7 +418,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             <?php if (!empty($success)): ?>
                 <div class="alert alert-success">
-                    <?php echo htmlspecialchars($success); ?>
+                    <?php echo $success; ?>
                 </div>
             <?php endif; ?>
 

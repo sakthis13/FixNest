@@ -1,9 +1,57 @@
 <?php
 session_start();
 
+require_once __DIR__ . "/../includes/db.php";
+
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
     header("Location: ../index.php");
     exit();
+}
+
+$student_id = $_SESSION["student_id"] ?? "";
+$complaint_id = trim($_GET["complaint_id"] ?? "");
+
+$complaint = null;
+$error = "";
+
+if ($student_id === "" || $complaint_id === "") {
+
+    $error = "Invalid complaint request.";
+
+} else {
+
+    $sql = "SELECT
+                complaint_id,
+                student_id,
+                hostel,
+                location_type,
+                room_number,
+                floor_number,
+                category,
+                description,
+                severity,
+                severity_confidence,
+                recurring,
+                similar_count,
+                status,
+                created_at,
+                updated_at
+            FROM complaints
+            WHERE complaint_id = :complaint_id
+              AND student_id = :student_id";
+
+    $stmt = $pdo->prepare($sql);
+
+    $stmt->execute([
+        ":complaint_id" => $complaint_id,
+        ":student_id" => $student_id
+    ]);
+
+    $complaint = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$complaint) {
+        $error = "Complaint not found.";
+    }
 }
 ?>
 
@@ -253,134 +301,96 @@ if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
             <p>View your complaint status and maintenance progress.</p>
         </div>
 
-        <div class="grid">
+        <div class="details-grid">
 
-            <div>
-
-                <div class="card">
-                    <h2>Complaint Information</h2>
-
-                    <div class="details-grid">
-
-                        <div class="detail-item">
-                            <div class="label">Complaint ID</div>
-                            <div class="value">FX-1024</div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Current Status</div>
-                            <div class="value">
-                                <span class="badge progress">In Progress</span>
-                            </div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Room Number</div>
-                            <div class="value">B-204</div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Block</div>
-                            <div class="value">Block B</div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">AI Predicted Category</div>
-                            <div class="value">Plumbing</div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Priority</div>
-                            <div class="value">High</div>
-                        </div>
-
-                        <div class="detail-item full">
-                            <div class="label">Complaint Description</div>
-                            <div class="value description">
-                                Water leakage is happening in the bathroom.
-                                The floor is becoming wet and slippery.
-                                Please fix this issue as soon as possible.
-                            </div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Created Date</div>
-                            <div class="value">06 September 2026</div>
-                        </div>
-
-                        <div class="detail-item">
-                            <div class="label">Last Updated</div>
-                            <div class="value">06 September 2026</div>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>Complaint Timeline</h2>
-
-                    <div class="timeline">
-
-                        <div class="timeline-item">
-                            <h4>Work In Progress</h4>
-                            <p>Maintenance team started working on your complaint.</p>
-                            <p>06 September 2026, 11:00 AM</p>
-                        </div>
-
-                        <div class="timeline-item">
-                            <h4>Complaint Assigned</h4>
-                            <p>Your complaint was assigned to the maintenance team.</p>
-                            <p>06 September 2026, 10:30 AM</p>
-                        </div>
-
-                        <div class="timeline-item">
-                            <h4>Complaint Approved</h4>
-                            <p>Warden approved your complaint.</p>
-                            <p>06 September 2026, 10:15 AM</p>
-                        </div>
-
-                        <div class="timeline-item">
-                            <h4>Complaint Raised</h4>
-                            <p>You submitted this complaint successfully.</p>
-                            <p>06 September 2026, 09:45 AM</p>
-                        </div>
-
-                    </div>
-                </div>
-
-            </div>
-
-            <div>
-
-                <div class="card">
-                    <h2>Maintenance Remarks</h2>
-
-                    <p style="color:#4b5563; line-height:1.7;">
-                        Maintenance team inspected the bathroom leakage.
-                        Required plumbing materials are being arranged.
-                    </p>
-
-                    <div class="info-box">
-                        You will be notified when the complaint is resolved.
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>Need More Help?</h2>
-
-                    <p style="color:#6b7280; line-height:1.6;">
-                        If the issue is urgent or the status is not updated,
-                        please contact your hostel warden.
-                    </p>
-
-                    <a href="my-complaints.php" class="btn">
-                        Back to Complaints
-                    </a>
-                </div>
-
-            </div>
-
+    <div class="detail-item">
+        <div class="label">Complaint ID</div>
+        <div class="value">
+            <?= htmlspecialchars($complaint["complaint_id"]) ?>
         </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Current Status</div>
+        <div class="value">
+            <?php
+            $status_class = "";
+
+            if ($complaint["status"] === "Pending") {
+                $status_class = "pending";
+            } elseif ($complaint["status"] === "In Progress") {
+                $status_class = "progress";
+            } elseif ($complaint["status"] === "Resolved") {
+                $status_class = "resolved";
+            } elseif ($complaint["status"] === "Rejected") {
+                $status_class = "rejected";
+            }
+            ?>
+
+            <span class="badge <?= htmlspecialchars($status_class) ?>">
+                <?= htmlspecialchars($complaint["status"]) ?>
+            </span>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Room Number</div>
+        <div class="value">
+            <?php
+            if (!empty($complaint["room_number"])) {
+                echo htmlspecialchars($complaint["room_number"]);
+            } elseif (!empty($complaint["floor_number"])) {
+                echo "Floor " . htmlspecialchars($complaint["floor_number"]);
+            } else {
+                echo "-";
+            }
+            ?>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Hostel</div>
+        <div class="value">
+            <?= htmlspecialchars($complaint["hostel"]) ?>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Category</div>
+        <div class="value">
+            <?= htmlspecialchars($complaint["category"]) ?>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Priority</div>
+        <div class="value">
+            <?= htmlspecialchars($complaint["severity"]) ?>
+        </div>
+    </div>
+
+    <div class="detail-item full">
+        <div class="label">Complaint Description</div>
+        <div class="value description">
+            <?= nl2br(htmlspecialchars($complaint["description"])) ?>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Created Date</div>
+        <div class="value">
+            <?= htmlspecialchars(date("d F Y, h:i A", strtotime($complaint["created_at"]))) ?>
+        </div>
+    </div>
+
+    <div class="detail-item">
+        <div class="label">Last Updated</div>
+        <div class="value">
+            <?= htmlspecialchars(date("d F Y, h:i A", strtotime($complaint["updated_at"]))) ?>
+        </div>
+    </div>
+
+</div>
 
     </div>
 
