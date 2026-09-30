@@ -134,32 +134,19 @@
         /* ================= HOME / HERO ================= */
 
         .hero {
+    min-height: 560px;
 
-            min-height: 560px;
+    display: flex;
+    align-items: center;
 
-            display: flex;
+    padding: 70px 8%;
 
-            align-items: center;
+    background-image: url("images/hostel.jpg");
 
-            padding: 70px 8%;
-
-
-            background-image:
-
-                linear-gradient(
-                    rgba(255, 255, 255, 0.70),
-                    rgba(255, 255, 255, 0.70)
-                ),
-
-                url("images/hostel.jpg");
-
-
-            background-size: cover;
-
-            background-position: center;
-
-            background-repeat: no-repeat;
-        }
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
 
 
         .hero-content {
