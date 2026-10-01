@@ -4,13 +4,7 @@ session_start();
 
 require_once __DIR__ . "/../includes/db.php";
 
-
-/*
-|--------------------------------------------------------------------------
-| CHECK MAINTENANCE LOGIN
-|--------------------------------------------------------------------------
-*/
-
+// Maintenance authentication
 if (
     !isset($_SESSION["role"]) ||
     $_SESSION["role"] !== "maintenance"
@@ -18,13 +12,6 @@ if (
     header("Location: ../index.php");
     exit();
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| GET COMPLAINT ID
-|--------------------------------------------------------------------------
-*/
 
 $complaint_id = trim(
     $_GET["complaint_id"] ??
@@ -36,17 +23,11 @@ if ($complaint_id === "") {
     die("Invalid complaint ID.");
 }
 
-
 $message = "";
 $message_type = "";
 
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE MAINTENANCE STATUS
-|--------------------------------------------------------------------------
-*/
-
+// Update maintenance status
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $maintenance_status =
@@ -54,13 +35,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $maintenance_remarks =
         trim($_POST["maintenance_remarks"] ?? "");
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALLOWED STATUS
-    |--------------------------------------------------------------------------
-    */
 
     $allowed_statuses = [
         "Not Started",
@@ -79,33 +53,80 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | CONVERT MAINTENANCE STATUS
-    | TO MAIN COMPLAINT STATUS
-    |--------------------------------------------------------------------------
-    */
+    // Get current complaint
+    $check_sql = "
+        SELECT
+            status,
+            resolution_confirmation
+        FROM complaints
+        WHERE complaint_id = :complaint_id
+          AND review_decision = 'Approved'
+    ";
 
+    $check_stmt = $pdo->prepare($check_sql);
+
+    $check_stmt->execute([
+        ":complaint_id" => $complaint_id
+    ]);
+
+    $current_complaint =
+        $check_stmt->fetch(PDO::FETCH_ASSOC);
+
+
+    if (!$current_complaint) {
+
+        die(
+            "Complaint not found or it has not been approved by the warden."
+        );
+    }
+
+
+    $current_status =
+        $current_complaint["status"] ?? "Pending";
+
+    $current_confirmation =
+        $current_complaint["resolution_confirmation"]
+        ?? "Pending";
+
+
+    // Do not change a complaint while waiting for warden confirmation
+    if (
+        $current_status === "Resolved" &&
+        $current_confirmation === "Pending"
+    ) {
+
+        header(
+            "Location: complaint-details.php?complaint_id="
+            . urlencode($complaint_id)
+            . "&waiting=1"
+        );
+
+        exit();
+    }
+
+
+    // Convert maintenance status to complaint status
     if ($maintenance_status === "Resolved") {
 
         $complaint_status = "Resolved";
+
+        $resolution_confirmation = "Pending";
 
     } elseif ($maintenance_status === "In Progress") {
 
         $complaint_status = "In Progress";
 
+        $resolution_confirmation = "Pending";
+
     } else {
 
         $complaint_status = "Pending";
+
+        $resolution_confirmation = "Pending";
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | UPDATE DATABASE
-    |--------------------------------------------------------------------------
-    */
-
+    // Save maintenance update
     $sql = "
         UPDATE complaints
 
@@ -118,6 +139,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             status = :status,
 
+            resolution_confirmation = :resolution_confirmation,
+
             updated_at = CURRENT_TIMESTAMP
 
         WHERE complaint_id = :complaint_id
@@ -125,9 +148,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
           AND review_decision = 'Approved'
     ";
 
-
     $stmt = $pdo->prepare($sql);
-
 
     $stmt->execute([
 
@@ -142,17 +163,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ":status" =>
             $complaint_status,
 
+        ":resolution_confirmation" =>
+            $resolution_confirmation,
+
         ":complaint_id" =>
             $complaint_id
-
     ]);
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | REDIRECT
-    |--------------------------------------------------------------------------
-    */
 
     header(
         "Location: complaint-details.php?complaint_id="
@@ -164,12 +181,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| FETCH COMPLAINT
-|--------------------------------------------------------------------------
-*/
-
+// Fetch complaint
 $sql = "
 
     SELECT
@@ -204,6 +216,8 @@ $sql = "
 
         c.review_decision,
 
+        c.resolution_confirmation,
+
         c.warden_remarks,
 
         c.maintenance_status,
@@ -230,14 +244,12 @@ $sql = "
 
 $stmt = $pdo->prepare($sql);
 
-
 $stmt->execute([
 
     ":complaint_id" =>
         $complaint_id
 
 ]);
-
 
 $complaint =
     $stmt->fetch(PDO::FETCH_ASSOC);
@@ -251,16 +263,9 @@ if (!$complaint) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| MAINTENANCE STATUS
-|--------------------------------------------------------------------------
-*/
-
 $maintenance_status =
     $complaint["maintenance_status"]
     ?? "Not Started";
-
 
 if ($maintenance_status === "") {
 
@@ -268,11 +273,10 @@ if ($maintenance_status === "") {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| CONFIDENCE
-|--------------------------------------------------------------------------
-*/
+$resolution_confirmation =
+    $complaint["resolution_confirmation"]
+    ?? "Pending";
+
 
 $confidence = null;
 
@@ -289,72 +293,53 @@ if (
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| LOCATION
-|--------------------------------------------------------------------------
-*/
-
+// Location
 $location_parts = [];
 
-
-if (
-    !empty(
-        $complaint["room_number"]
-    )
-) {
+if (!empty($complaint["room_number"])) {
 
     $location_parts[] =
         "Room "
         . $complaint["room_number"];
 }
 
-
-if (
-    !empty(
-        $complaint["floor_number"]
-    )
-) {
+if (!empty($complaint["floor_number"])) {
 
     $location_parts[] =
         "Floor "
         . $complaint["floor_number"];
 }
 
-
-if (
-    !empty(
-        $complaint["location_type"]
-    )
-) {
+if (!empty($complaint["location_type"])) {
 
     $location_parts[] =
         $complaint["location_type"];
 }
 
-
 $location =
     !empty($location_parts)
-
-    ? implode(
-        " • ",
-        $location_parts
-    )
-
+    ? implode(" • ", $location_parts)
     : "Not specified";
 
 
-/*
-|--------------------------------------------------------------------------
-| STATUS CSS
-|--------------------------------------------------------------------------
-*/
-
+// Status display
 if (
-    $maintenance_status === "Resolved"
+    $maintenance_status === "Resolved" &&
+    $resolution_confirmation === "Pending"
+) {
+
+    $status_class = "awaiting";
+
+    $status_text = "Awaiting Warden Confirmation";
+
+} elseif (
+    $maintenance_status === "Resolved" &&
+    $resolution_confirmation === "Confirmed"
 ) {
 
     $status_class = "resolved";
+
+    $status_text = "Resolved";
 
 } elseif (
     $maintenance_status === "In Progress"
@@ -362,25 +347,31 @@ if (
 
     $status_class = "in-progress";
 
+    $status_text = "In Progress";
+
 } else {
 
     $status_class = "not-started";
+
+    $status_text = "Not Started";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| SEVERITY CSS
-|--------------------------------------------------------------------------
-*/
-
+// Severity
 $severity =
     $complaint["severity"]
     ?? "Medium";
 
-
 $severity_class =
     strtolower($severity);
+
+
+// Can maintenance edit?
+$waiting_for_confirmation =
+    (
+        $maintenance_status === "Resolved" &&
+        $resolution_confirmation === "Pending"
+    );
 
 ?>
 
@@ -401,7 +392,6 @@ $severity_class =
     Complaint Details | FixNest Maintenance
 </title>
 
-
 <style>
 
 * {
@@ -410,49 +400,34 @@ $severity_class =
     padding: 0;
 }
 
-
 body {
-
     font-family: Arial, sans-serif;
-
     background: #f4f7fb;
-
     color: #1f2937;
 }
 
 
-/* NAVBAR */
+/* Navbar */
 
 .navbar {
-
     height: 65px;
-
     background: #2563eb;
-
     color: white;
 
     display: flex;
-
     align-items: center;
-
     justify-content: space-between;
 
     padding: 0 30px;
 }
 
-
 .logo {
-
     font-size: 22px;
-
     font-weight: bold;
 }
 
-
 .logout {
-
     color: white;
-
     text-decoration: none;
 
     background: rgba(255,255,255,0.15);
@@ -463,48 +438,37 @@ body {
 }
 
 
-/* CONTAINER */
+/* Container */
 
 .container {
-
     max-width: 1100px;
-
     margin: 30px auto;
-
     padding: 0 20px;
 }
 
 
-/* BACK */
+/* Back */
 
 .back {
-
     display: inline-block;
-
     margin-bottom: 20px;
 
     color: #2563eb;
-
     text-decoration: none;
-
     font-weight: 600;
 }
 
-
 .back:hover {
-
     text-decoration: underline;
 }
 
 
-/* HEADER */
+/* Header */
 
 .page-header {
-
     display: flex;
 
     justify-content: space-between;
-
     align-items: center;
 
     gap: 20px;
@@ -512,27 +476,20 @@ body {
     margin-bottom: 25px;
 }
 
-
 .page-header h1 {
-
     font-size: 28px;
-
     margin-bottom: 7px;
 }
 
-
 .complaint-id {
-
     color: #64748b;
-
     font-size: 14px;
 }
 
 
-/* STATUS */
+/* Status */
 
 .status {
-
     padding: 10px 16px;
 
     border-radius: 20px;
@@ -544,37 +501,31 @@ body {
     font-size: 13px;
 }
 
-
 .not-started {
-
     background: #fef3c7;
-
     color: #92400e;
 }
 
-
 .in-progress {
-
     background: #dbeafe;
-
     color: #1d4ed8;
 }
 
+.awaiting {
+    background: #fef3c7;
+    color: #92400e;
+}
 
 .resolved {
-
     background: #dcfce7;
-
     color: #166534;
 }
 
 
-/* SUCCESS */
+/* Messages */
 
 .success {
-
     background: #dcfce7;
-
     color: #166534;
 
     padding: 13px 16px;
@@ -586,11 +537,23 @@ body {
     border: 1px solid #bbf7d0;
 }
 
+.warning {
+    background: #fef3c7;
+    color: #92400e;
 
-/* CARD */
+    padding: 13px 16px;
+
+    border-radius: 7px;
+
+    margin-bottom: 20px;
+
+    border: 1px solid #fde68a;
+}
+
+
+/* Card */
 
 .card {
-
     background: white;
 
     border-radius: 12px;
@@ -603,19 +566,15 @@ body {
         0 3px 12px rgba(0,0,0,0.06);
 }
 
-
 .card h2 {
-
     font-size: 19px;
-
     margin-bottom: 20px;
 }
 
 
-/* DETAILS */
+/* Details */
 
 .details-grid {
-
     display: grid;
 
     grid-template-columns:
@@ -624,9 +583,7 @@ body {
     gap: 18px;
 }
 
-
 .detail {
-
     background: #f8fafc;
 
     padding: 15px;
@@ -636,9 +593,7 @@ body {
     border: 1px solid #e5e7eb;
 }
 
-
 .label {
-
     display: block;
 
     font-size: 12px;
@@ -652,19 +607,15 @@ body {
     font-weight: bold;
 }
 
-
 .value {
-
     font-size: 15px;
-
     font-weight: 600;
 }
 
 
-/* DESCRIPTION */
+/* Description */
 
 .description {
-
     background: #f8fafc;
 
     padding: 18px;
@@ -677,10 +628,9 @@ body {
 }
 
 
-/* SEVERITY */
+/* Severity */
 
 .severity {
-
     display: inline-block;
 
     padding: 6px 12px;
@@ -692,35 +642,25 @@ body {
     font-weight: bold;
 }
 
-
 .high {
-
     background: #fee2e2;
-
     color: #b91c1c;
 }
 
-
 .medium {
-
     background: #fef3c7;
-
     color: #92400e;
 }
 
-
 .low {
-
     background: #dcfce7;
-
     color: #166534;
 }
 
 
-/* WARDEN */
+/* Warden */
 
 .warden-box {
-
     background: #eff6ff;
 
     border-left: 4px solid #2563eb;
@@ -732,25 +672,19 @@ body {
     line-height: 1.6;
 }
 
-
 .warden-decision {
-
     font-weight: bold;
-
     margin-bottom: 10px;
 }
 
 
-/* FORM */
+/* Form */
 
 .form-group {
-
     margin-bottom: 20px;
 }
 
-
 .form-group label {
-
     display: block;
 
     margin-bottom: 8px;
@@ -758,10 +692,8 @@ body {
     font-weight: bold;
 }
 
-
 select,
 textarea {
-
     width: 100%;
 
     padding: 12px;
@@ -777,10 +709,8 @@ textarea {
     background: white;
 }
 
-
 select:focus,
 textarea:focus {
-
     outline: none;
 
     border-color: #2563eb;
@@ -790,19 +720,15 @@ textarea:focus {
         rgba(37,99,235,0.1);
 }
 
-
 textarea {
-
     min-height: 130px;
-
     resize: vertical;
 }
 
 
-/* BUTTON */
+/* Button */
 
 .save-btn {
-
     background: #2563eb;
 
     color: white;
@@ -820,17 +746,19 @@ textarea {
     cursor: pointer;
 }
 
-
 .save-btn:hover {
-
     background: #1d4ed8;
 }
 
+.save-btn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
 
-/* INFO */
+
+/* Info */
 
 .info-box {
-
     background: #eff6ff;
 
     border: 1px solid #bfdbfe;
@@ -849,32 +777,24 @@ textarea {
 }
 
 
-/* RESPONSIVE */
+/* Responsive */
 
 @media (max-width: 700px) {
 
     .details-grid {
-
         grid-template-columns: 1fr;
     }
 
-
     .page-header {
-
         flex-direction: column;
-
         align-items: flex-start;
     }
 
-
     .navbar {
-
         padding: 0 15px;
     }
 
-
     .container {
-
         padding: 0 12px;
     }
 
@@ -891,19 +811,14 @@ textarea {
 <nav class="navbar">
 
     <div class="logo">
-
         FixNest Maintenance
-
     </div>
-
 
     <a
         href="../index.php"
         class="logout"
     >
-
         Logout
-
     </a>
 
 </nav>
@@ -926,12 +841,33 @@ textarea {
 
     Maintenance update saved successfully.
 
+    <?php if (
+        $maintenance_status === "Resolved"
+    ): ?>
+
+        The complaint is now waiting for
+        warden confirmation.
+
+    <?php endif; ?>
+
 </div>
 
 <?php endif; ?>
 
 
-<!-- HEADER -->
+<?php if (isset($_GET["waiting"])): ?>
+
+<div class="warning">
+
+    This complaint is waiting for warden confirmation.
+    Maintenance cannot update it until the warden responds.
+
+</div>
+
+<?php endif; ?>
+
+
+<!-- Header -->
 
 <div class="page-header">
 
@@ -961,7 +897,7 @@ textarea {
     >
 
         <?= htmlspecialchars(
-            $maintenance_status
+            $status_text
         ) ?>
 
     </div>
@@ -969,7 +905,7 @@ textarea {
 </div>
 
 
-<!-- STUDENT -->
+<!-- Student -->
 
 <div class="card">
 
@@ -1056,7 +992,7 @@ textarea {
 </div>
 
 
-<!-- COMPLAINT -->
+<!-- Complaint -->
 
 <div class="card">
 
@@ -1167,7 +1103,7 @@ textarea {
 <div class="detail">
 
 <span class="label">
-    Current Complaint Status
+    Complaint Status
 </span>
 
 <span class="value">
@@ -1176,6 +1112,41 @@ textarea {
     $complaint["status"]
     ?? "Pending"
 ) ?>
+
+</span>
+
+</div>
+
+
+<div class="detail">
+
+<span class="label">
+    Resolution Confirmation
+</span>
+
+<span class="value">
+
+<?php
+
+if (
+    $resolution_confirmation === "Confirmed"
+) {
+
+    echo "Confirmed";
+
+} elseif (
+    $resolution_confirmation === "Rejected"
+) {
+
+    echo "Rejected - Sent Back to Maintenance";
+
+} else {
+
+    echo "Pending";
+
+}
+
+?>
 
 </span>
 
@@ -1206,7 +1177,7 @@ textarea {
 </div>
 
 
-<!-- WARDEN REVIEW -->
+<!-- Warden Review -->
 
 <div class="card">
 
@@ -1266,13 +1237,25 @@ Decision:
 </div>
 
 
-<!-- MAINTENANCE UPDATE -->
+<!-- Maintenance Update -->
 
 <div class="card">
 
 <h2>
     Maintenance Work Update
 </h2>
+
+
+<?php if ($waiting_for_confirmation): ?>
+
+<div class="warning">
+
+    Maintenance has marked this complaint as resolved.
+    It is now waiting for the warden to confirm the resolution.
+
+</div>
+
+<?php else: ?>
 
 
 <form method="POST">
@@ -1343,9 +1326,7 @@ Decision:
 <label
     for="maintenance_remarks"
 >
-
     Maintenance Remarks
-
 </label>
 
 
@@ -1373,10 +1354,13 @@ Decision:
 
 </form>
 
+
+<?php endif; ?>
+
 </div>
 
 
-<!-- TIMELINE -->
+<!-- Timeline -->
 
 <div class="card">
 
@@ -1459,8 +1443,13 @@ Decision:
 </strong>
 
 Update the work status after reviewing the complaint.
-Use <strong>In Progress</strong> when maintenance work has started
-and <strong>Resolved</strong> after the issue has been fixed.
+
+Use <strong>In Progress</strong> when maintenance work has started.
+
+Use <strong>Resolved</strong> only after the physical issue has been fixed.
+
+After selecting <strong>Resolved</strong>, the complaint is sent to the
+warden for final confirmation.
 
 </div>
 

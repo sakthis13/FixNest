@@ -6,34 +6,23 @@ require_once __DIR__ . "/../includes/db.php";
 
 if (
     !isset($_SESSION["role"]) ||
-    $_SESSION["role"] !== "student"
+    $_SESSION["role"] !== "warden"
 ) {
     header("Location: ../index.php");
     exit();
 }
 
+$warden_username = $_SESSION["username"] ?? "";
+$warden_hostel = $_SESSION["hostel_type"] ?? "";
 
-$student_id = $_SESSION["student_id"] ?? "";
+if ($warden_hostel === "") {
 
-$gender = $_SESSION["gender"] ?? "";
-
-$hostel = $_SESSION["hostel_type"] ?? "";
-
-
-$gender_normalized = strtolower(trim($gender));
-
-if (
-    $gender_normalized === "male" ||
-    $gender_normalized === "m"
-) {
-    $hostel = "Boys Hostel";
-} elseif (
-    $gender_normalized === "female" ||
-    $gender_normalized === "f"
-) {
-    $hostel = "Girls Hostel";
+    if ($warden_username === "girlswarden") {
+        $warden_hostel = "Girls Hostel";
+    } else {
+        $warden_hostel = "Boys Hostel";
+    }
 }
-
 
 $success = "";
 $error = "";
@@ -43,8 +32,6 @@ $room_number = "";
 $floor_number = "";
 $category = "";
 $description = "";
-
-
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
@@ -68,7 +55,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $_POST["description"] ?? ""
     );
 
-
     if (
         $location_type === "" ||
         $category === "" ||
@@ -82,7 +68,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $room_number === ""
     ) {
 
-        $error = "Please enter your room number.";
+        $error = "Please enter the room number.";
 
     } elseif (
         (
@@ -94,19 +80,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         $error = "Please select the floor number.";
 
-    } elseif ($hostel === "") {
+    } elseif ($warden_hostel === "") {
 
-        $error =
-            "Unable to determine hostel. Please check the student's gender.";
+        $error = "Unable to determine the warden hostel.";
+
+    } elseif ($warden_username === "") {
+
+        $error = "Unable to determine the warden username.";
 
     } else {
-
 
         $complaint_id =
             "FX-" .
             date("ymdHis") .
             rand(10, 99);
-
 
         $python =
             "C:\\Users\\SAKTHI S\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
@@ -114,24 +101,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $api_path =
             realpath(__DIR__ . "/../ai/api.py");
 
-
         if ($api_path === false) {
 
             $error = "AI API file could not be found.";
 
         } else {
 
-
             $descriptorspec = [
-
                 0 => ["pipe", "r"],
-
                 1 => ["pipe", "w"],
-
                 2 => ["pipe", "w"]
-
             ];
-
 
             $process = proc_open(
                 [
@@ -145,11 +125,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 dirname($api_path)
             );
 
-
             if (is_resource($process)) {
 
                 fclose($pipes[0]);
-
 
                 $ai_output =
                     stream_get_contents($pipes[1]);
@@ -157,14 +135,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $ai_error =
                     stream_get_contents($pipes[2]);
 
-
                 fclose($pipes[1]);
                 fclose($pipes[2]);
 
-
                 $return_code =
                     proc_close($process);
-
 
                 if ($return_code !== 0) {
 
@@ -174,17 +149,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 } else {
 
-
                     $ai_result =
                         json_decode(
                             trim($ai_output),
                             true
                         );
 
-
-                    if (
-                        !is_array($ai_result)
-                    ) {
+                    if (!is_array($ai_result)) {
 
                         $error =
                             "AI returned invalid JSON: " .
@@ -200,7 +171,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     } else {
 
-
                         $severity =
                             trim(
                                 (string)(
@@ -209,14 +179,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 )
                             );
 
-
                         $severity_confidence =
                             (float)(
                                 $ai_result[
                                     "severity_confidence"
                                 ] ?? 0
                             );
-
 
                         $similar_count =
                             (int)(
@@ -225,10 +193,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 ] ?? 0
                             );
 
-
                         $recurring_value =
                             $ai_result["recurring"] ?? false;
-
 
                         if (
                             is_bool($recurring_value)
@@ -258,8 +224,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 );
 
                         } elseif (
-                            is_numeric($recurring_value)
-                        ) {
+                            is_numeric($recurring_value
+                        )) {
 
                             $recurring =
                                 ((int)$recurring_value === 1);
@@ -269,13 +235,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             $recurring = false;
                         }
 
-
                         $allowed_severities = [
                             "High",
                             "Medium",
                             "Low"
                         ];
-
 
                         if (
                             !in_array(
@@ -287,7 +251,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                             $severity = "Medium";
                         }
-
 
                         if (
                             $severity_confidence < 0
@@ -301,7 +264,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                             $severity_confidence = 1;
                         }
-
 
                         try {
 
@@ -336,10 +298,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 )
                             ";
 
-
                             $stmt =
                                 $pdo->prepare($sql);
-
 
                             $stmt->bindValue(
                                 ":complaint_id",
@@ -347,27 +307,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 PDO::PARAM_STR
                             );
 
-
                             $stmt->bindValue(
                                 ":student_id",
-                                $student_id,
+                                $warden_username,
                                 PDO::PARAM_STR
                             );
-
 
                             $stmt->bindValue(
                                 ":hostel",
-                                $hostel,
+                                $warden_hostel,
                                 PDO::PARAM_STR
                             );
-
 
                             $stmt->bindValue(
                                 ":location_type",
                                 $location_type,
                                 PDO::PARAM_STR
                             );
-
 
                             if ($room_number !== "") {
 
@@ -386,7 +342,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 );
                             }
 
-
                             if ($floor_number !== "") {
 
                                 $stmt->bindValue(
@@ -404,13 +359,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 );
                             }
 
-
                             $stmt->bindValue(
                                 ":category",
                                 $category,
                                 PDO::PARAM_STR
                             );
-
 
                             $stmt->bindValue(
                                 ":description",
@@ -418,26 +371,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 PDO::PARAM_STR
                             );
 
-
                             $stmt->bindValue(
                                 ":severity",
                                 $severity,
                                 PDO::PARAM_STR
                             );
 
-
                             $stmt->bindValue(
                                 ":severity_confidence",
                                 $severity_confidence
                             );
 
-
                             $stmt->bindValue(
                                 ":recurring",
-                                $recurring ? "TRUE" : "FALSE",
+                                $recurring
+                                    ? "TRUE"
+                                    : "FALSE",
                                 PDO::PARAM_STR
                             );
-
 
                             $stmt->bindValue(
                                 ":similar_count",
@@ -445,37 +396,35 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                 PDO::PARAM_INT
                             );
 
-
                             $stmt->execute();
-
 
                             $success =
                                 "Complaint submitted successfully!<br>" .
-
                                 "Complaint ID: " .
                                 htmlspecialchars(
                                     $complaint_id
                                 ) .
                                 "<br>" .
-
-                                "Hostel: " .
+                                "Raised By: " .
                                 htmlspecialchars(
-                                    $hostel
+                                    $warden_username
                                 ) .
                                 "<br>" .
-
+                                "Hostel: " .
+                                htmlspecialchars(
+                                    $warden_hostel
+                                ) .
+                                "<br>" .
                                 "Category: " .
                                 htmlspecialchars(
                                     $category
                                 ) .
                                 "<br>" .
-
                                 "Severity: " .
                                 htmlspecialchars(
                                     $severity
                                 ) .
                                 "<br>" .
-
                                 "Recurring: " .
                                 (
                                     $recurring
@@ -483,19 +432,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                     : "No"
                                 ) .
                                 "<br>" .
-
                                 "Similar complaints: " .
                                 htmlspecialchars(
                                     (string)$similar_count
                                 );
-
 
                             $location_type = "";
                             $room_number = "";
                             $floor_number = "";
                             $category = "";
                             $description = "";
-
 
                         } catch (PDOException $e) {
 
@@ -505,7 +451,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         }
                     }
                 }
-
 
             } else {
 
@@ -517,7 +462,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 ?>
-
 
 <!DOCTYPE html>
 
@@ -536,389 +480,273 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         Raise Complaint - FixNest
     </title>
 
-
     <style>
 
         * {
             box-sizing: border-box;
         }
 
-
         body {
-
             margin: 0;
-
             font-family: Arial, sans-serif;
-
             background: #f3f4f6;
-
             color: #111827;
         }
 
-
         .navbar {
-
             background: #1d4ed8;
-
             color: white;
-
             padding: 18px 30px;
-
             display: flex;
-
             justify-content: space-between;
-
             align-items: center;
         }
 
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
 
         .navbar h2 {
-
             margin: 0;
-
             font-size: 22px;
         }
-        .navbar-left {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
 
-.back-dashboard {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    background: white;
-    color: #1d4ed8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    font-size: 22px;
-    font-weight: bold;
-    border: none;
-}
+        .hostel-label {
+            margin-top: 4px;
+            font-size: 13px;
+            opacity: 0.9;
+        }
 
-.back-dashboard:hover {
-    background: #eff6ff;
-}
-
-
-        .logout {
-
+        .back-dashboard {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
             background: white;
-
             color: #1d4ed8;
-
-            padding: 9px 15px;
-
-            border-radius: 7px;
-
+            display: flex;
+            align-items: center;
+            justify-content: center;
             text-decoration: none;
-
+            font-size: 22px;
             font-weight: bold;
         }
 
+        .back-dashboard:hover {
+            background: #eff6ff;
+        }
+
+        .logout {
+            background: white;
+            color: #1d4ed8;
+            padding: 9px 15px;
+            border-radius: 7px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .logout:hover {
+            background: #eff6ff;
+        }
 
         .container {
-
             max-width: 850px;
-
             margin: auto;
-
             padding: 35px 20px;
         }
 
-
         .page-header {
-
             margin-bottom: 25px;
         }
 
-
         .page-header h1 {
-
             margin: 0 0 8px;
-
             font-size: 30px;
         }
 
-
         .page-header p {
-
             margin: 0;
-
             color: #6b7280;
-
             font-size: 14px;
         }
 
-
         .form-card {
-
             background: white;
-
             padding: 28px;
-
             border-radius: 14px;
-
             box-shadow:
                 0 4px 18px
                 rgba(0, 0, 0, 0.06);
         }
 
-
         .form-row {
-
             display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
+            grid-template-columns: 1fr 1fr;
             gap: 18px;
         }
 
-
         .form-group {
-
             margin-bottom: 20px;
         }
 
-
         .form-group label {
-
             display: block;
-
             margin-bottom: 8px;
-
             font-size: 14px;
-
             font-weight: bold;
-
             color: #374151;
         }
-
 
         .form-group input,
         .form-group select,
         .form-group textarea {
-
             width: 100%;
-
             padding: 12px 14px;
-
-            border:
-                1px solid #d1d5db;
-
+            border: 1px solid #d1d5db;
             border-radius: 8px;
-
             font-size: 14px;
-
             outline: none;
-
             background: white;
         }
-
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
-
             border-color: #2563eb;
-
             box-shadow:
                 0 0 0 3px
                 rgba(37, 99, 235, 0.12);
         }
 
-
         .form-group textarea {
-
             min-height: 150px;
-
             resize: vertical;
         }
 
-
         .required {
-
             color: #dc2626;
         }
 
+        .hostel-box {
+            margin-bottom: 22px;
+            padding: 14px 16px;
+            border-radius: 9px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+            font-size: 14px;
+        }
 
         .alert {
-
             padding: 14px 16px;
-
             border-radius: 8px;
-
             margin-bottom: 20px;
-
             font-size: 14px;
-
             line-height: 1.5;
         }
 
-
         .alert-success {
-
             background: #dcfce7;
-
-            border:
-                1px solid #86efac;
-
+            border: 1px solid #86efac;
             color: #166534;
         }
 
-
         .alert-error {
-
             background: #fee2e2;
-
-            border:
-                1px solid #fca5a5;
-
+            border: 1px solid #fca5a5;
             color: #991b1b;
         }
 
-
         .info-box {
-
-            margin-top: 10px;
-
+            margin-top: 5px;
             padding: 15px;
-
             border-radius: 9px;
-
             background: #eff6ff;
-
-            border:
-                1px solid #bfdbfe;
-
+            border: 1px solid #bfdbfe;
             color: #1e40af;
-
             font-size: 13px;
-
             line-height: 1.6;
         }
 
-
         .button-row {
-
             display: flex;
-
             justify-content: flex-end;
-
             gap: 12px;
-
             margin-top: 25px;
         }
 
-
         .btn {
-
             border: none;
-
             border-radius: 8px;
-
             padding: 12px 20px;
-
             font-size: 14px;
-
             font-weight: bold;
-
             text-decoration: none;
-
             cursor: pointer;
         }
 
-
         .btn-primary {
-
             background: #1d4ed8;
-
             color: white;
         }
 
-
         .btn-primary:hover {
-
             background: #1e40af;
         }
 
-
         .btn-secondary {
-
             background: #e5e7eb;
-
             color: #374151;
         }
 
-
         .btn-secondary:hover {
-
             background: #d1d5db;
         }
-
 
         @media (max-width: 600px) {
 
             .navbar {
-
                 padding: 16px 18px;
             }
 
-
             .navbar h2 {
-
                 font-size: 16px;
             }
+
             .navbar-left {
-    gap: 10px;
-}
+                gap: 10px;
+            }
 
-.back-dashboard {
-    padding: 7px 10px;
-    font-size: 12px;
-}
-
+            .back-dashboard {
+                width: 34px;
+                height: 34px;
+                font-size: 18px;
+            }
 
             .container {
-
                 padding: 25px 15px;
             }
 
-
             .page-header h1 {
-
                 font-size: 25px;
             }
 
-
             .form-card {
-
                 padding: 20px;
             }
 
-
             .form-row {
-
                 grid-template-columns: 1fr;
-
                 gap: 0;
             }
 
-
             .button-row {
-
                 flex-direction: column;
             }
 
-
             .btn {
-
                 width: 100%;
-
                 text-align: center;
             }
 
@@ -928,25 +756,31 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 </head>
 
-
 <body>
-
 
 <div class="navbar">
 
     <div class="navbar-left">
 
         <a
-    class="back-dashboard"
-    href="dashboard.php"
-    title="Back to Dashboard"
->
-    ←
-</a>
+            class="back-dashboard"
+            href="dashboard.php"
+            title="Back to Dashboard"
+        >
+            ←
+        </a>
 
-        <h2>
-            FixNest Student
-        </h2>
+        <div>
+
+            <h2>
+                FixNest Warden
+            </h2>
+
+            <div class="hostel-label">
+                <?= htmlspecialchars($warden_hostel) ?>
+            </div>
+
+        </div>
 
     </div>
 
@@ -960,9 +794,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 
-
 <div class="container">
-
 
     <div class="page-header">
 
@@ -971,23 +803,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         </h1>
 
         <p>
-            Submit your hostel maintenance complaint
-            to the concerned team.
+            Submit a maintenance complaint for your hostel.
         </p>
 
     </div>
 
 
-
     <div class="form-card">
-
 
         <?php if (!empty($success)): ?>
 
             <div class="alert alert-success">
-
                 <?= $success ?>
-
             </div>
 
         <?php endif; ?>
@@ -996,12 +823,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         <?php if (!empty($error)): ?>
 
             <div class="alert alert-error">
-
                 <?= htmlspecialchars($error) ?>
-
             </div>
 
         <?php endif; ?>
+
+
+        <div class="hostel-box">
+
+            <strong>Hostel:</strong>
+
+            <?= htmlspecialchars($warden_hostel) ?>
+
+            <br>
+
+            <strong>Raised By:</strong>
+
+            <?= htmlspecialchars($warden_username) ?>
+
+        </div>
 
 
         <form
@@ -1009,9 +849,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             action=""
         >
 
-
             <div class="form-row">
-
 
                 <div class="form-group">
 
@@ -1025,7 +863,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     </label>
 
-
                     <select
                         id="location_type"
                         name="location_type"
@@ -1037,23 +874,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             Select complaint location
                         </option>
 
-
-                        <!-- Changed from Room Number to Room -->
-
                         <option value="Room">
                             Room
                         </option>
-
 
                         <option value="Common Bathroom">
                             Common Bathroom
                         </option>
 
-
                         <option value="Lobby / Corridor">
                             Lobby / Corridor
                         </option>
-
 
                         <option value="Study Hall">
                             Study Hall
@@ -1062,7 +893,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     </select>
 
                 </div>
-
 
 
                 <div
@@ -1081,7 +911,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     </label>
 
-
                     <input
                         type="text"
                         id="room_number"
@@ -1093,7 +922,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     >
 
                 </div>
-
 
 
                 <div
@@ -1112,7 +940,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     </label>
 
-
                     <select
                         id="floor_number"
                         name="floor_number"
@@ -1122,21 +949,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             Select floor
                         </option>
 
-
                         <option value="Ground Floor">
                             Ground Floor
                         </option>
-
 
                         <option value="1st Floor">
                             1st Floor
                         </option>
 
-
                         <option value="2nd Floor">
                             2nd Floor
                         </option>
-
 
                         <option value="3rd Floor">
                             3rd Floor
@@ -1147,7 +970,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 </div>
 
             </div>
-
 
 
             <div class="form-group">
@@ -1162,7 +984,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 </label>
 
-
                 <select
                     id="category"
                     name="category"
@@ -1173,56 +994,45 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         Select complaint category
                     </option>
 
-
                     <option value="Electrical">
                         Electrical
                     </option>
-
 
                     <option value="Plumbing & Drainage">
                         Plumbing &amp; Drainage
                     </option>
 
-
                     <option value="Water Supply">
                         Water Supply
                     </option>
-
 
                     <option value="Drinking Water">
                         Drinking Water
                     </option>
 
-
                     <option value="Cleaning & Hygiene">
                         Cleaning &amp; Hygiene
                     </option>
-
 
                     <option value="Furniture & Room Fixtures">
                         Furniture &amp; Room Fixtures
                     </option>
 
-
                     <option value="Building Maintenance">
                         Building Maintenance
                     </option>
-
 
                     <option value="Doors & Locks">
                         Doors &amp; Locks
                     </option>
 
-
                     <option value="Internet / Network">
                         Internet / Network
                     </option>
 
-
                     <option value="Pest Control">
                         Pest Control
                     </option>
-
 
                     <option value="Other">
                         Other
@@ -1231,7 +1041,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 </select>
 
             </div>
-
 
 
             <div class="form-group">
@@ -1246,11 +1055,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 </label>
 
-
                 <textarea
                     id="description"
                     name="description"
-                    placeholder="Explain your complaint clearly..."
+                    placeholder="Explain the complaint clearly..."
                     required
                 ><?= htmlspecialchars(
                     $description
@@ -1259,13 +1067,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
 
+            <div class="info-box">
 
-            
+                The complaint will be automatically analyzed
+                by the FixNest AI system to determine its
+                severity and identify similar or recurring
+                complaints.
 
+            </div>
 
 
             <div class="button-row">
-
 
                 <a
                     href="dashboard.php"
@@ -1274,7 +1086,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     Cancel
                 </a>
 
-
                 <button
                     type="submit"
                     class="btn btn-primary"
@@ -1282,18 +1093,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     Submit Complaint
                 </button>
 
-
             </div>
-
 
         </form>
 
-
     </div>
 
-
 </div>
-
 
 
 <script>
@@ -1305,60 +1111,40 @@ function handleLocationChange() {
             "location_type"
         ).value;
 
-
     const roomGroup =
         document.getElementById(
             "roomNumberGroup"
         );
-
 
     const floorGroup =
         document.getElementById(
             "floorNumberGroup"
         );
 
-
     const roomInput =
         document.getElementById(
             "room_number"
         );
-
 
     const floorInput =
         document.getElementById(
             "floor_number"
         );
 
-
     roomGroup.style.display = "none";
 
     floorGroup.style.display = "none";
-
 
     roomInput.required = false;
 
     floorInput.required = false;
 
-
-    /*
-     * Room selected:
-     * Show Room Number input.
-     */
-
-    if (
-        locationType === "Room"
-    ) {
+    if (locationType === "Room") {
 
         roomGroup.style.display = "block";
 
         roomInput.required = true;
     }
-
-
-    /*
-     * Common Bathroom or Lobby / Corridor:
-     * Show Floor Number input.
-     */
 
     if (
         locationType === "Common Bathroom" ||
@@ -1369,9 +1155,7 @@ function handleLocationChange() {
 
         floorInput.required = true;
     }
-
 }
-
 
 document.addEventListener(
     "DOMContentLoaded",
@@ -1379,7 +1163,6 @@ document.addEventListener(
 );
 
 </script>
-
 
 </body>
 

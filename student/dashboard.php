@@ -1,9 +1,45 @@
 <?php
 session_start();
 
+require_once __DIR__ . "/../includes/db.php";
+
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "student") {
     header("Location: ../index.php");
     exit();
+}
+
+$student_id = $_SESSION["student_id"] ?? "";
+
+$total_complaints = 0;
+$pending_complaints = 0;
+$in_progress_complaints = 0;
+$resolved_complaints = 0;
+$rejected_complaints = 0;
+
+if ($student_id !== "") {
+
+    $sql = "SELECT
+                COUNT(*) AS total_complaints,
+                COUNT(CASE WHEN status = 'Pending' THEN 1 END) AS pending_complaints,
+                COUNT(CASE WHEN status = 'In Progress' THEN 1 END) AS in_progress_complaints,
+                COUNT(CASE WHEN status = 'Resolved' THEN 1 END) AS resolved_complaints,
+                COUNT(CASE WHEN status = 'Rejected' THEN 1 END) AS rejected_complaints
+            FROM complaints
+            WHERE student_id = :student_id";
+
+    $stmt = $pdo->prepare($sql);
+
+    $stmt->execute([
+        ":student_id" => $student_id
+    ]);
+
+    $counts = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $total_complaints = $counts["total_complaints"];
+    $pending_complaints = $counts["pending_complaints"];
+    $in_progress_complaints = $counts["in_progress_complaints"];
+    $resolved_complaints = $counts["resolved_complaints"];
+    $rejected_complaints = $counts["rejected_complaints"];
 }
 
 $username = $_SESSION["username"] ?? "Student";
@@ -254,17 +290,23 @@ $hostel_type = $_SESSION["hostel_type"] ?? "Hostel";
 
             <div class="stat-card">
                 <h3>Total Complaints</h3>
-                <div class="number">0</div>
+                <div class="number">
+                     <?php echo $total_complaints; ?>
+                </div>
             </div>
 
             <div class="stat-card">
                 <h3>Pending Complaints</h3>
-                <div class="number">0</div>
+                <div class="number">
+                    <?php echo $pending_complaints; ?>
+                </div>
             </div>
 
             <div class="stat-card">
                 <h3>Resolved Complaints</h3>
-                <div class="number">0</div>
+                <div class="number">
+                    <?php echo $resolved_complaints; ?>
+                </div>
             </div>
 
         </div>

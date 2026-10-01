@@ -1,379 +1,919 @@
-<?php
+<!DOCTYPE html>
+<html lang="en">
 
-session_start();
+<head>
 
-require_once __DIR__ . "/includes/db.php";
+    <meta charset="UTF-8">
 
-$error = "";
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    <title>FixNest - Hostel Complaint Management System</title>
 
-    $username = trim($_POST["username"] ?? "");
-    $password = trim($_POST["password"] ?? "");
-
-    if ($username === "" || $password === "") {
-
-        $error = "Please enter username and password.";
-
-    } else {
-
-        $account_found = false;
-        $database_error = false;
+    <!-- Browser Tab Logo -->
+    <link rel="icon" type="image/png" href="images/image.png">
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | ADMIN LOGIN
-        |--------------------------------------------------------------------------
-        */
+    <style>
 
-        if ($username === "admin" && $password === "admin123") {
-
-            $_SESSION["username"] = "admin";
-            $_SESSION["role"] = "admin";
-
-            header("Location: admin/dashboard.php");
-            exit();
-
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | STUDENT LOGIN
-        |--------------------------------------------------------------------------
-        */
-
-        try {
-
-            $stmt = $pdo->prepare("
-                SELECT
-                    student_id,
-                    student_name,
-                    password,
-                    hostel_type,
-                    email,
-                    phone
-                FROM students
-                WHERE student_id = :username
-                LIMIT 1
-            ");
-
-            $stmt->execute([
-                ":username" => $username
-            ]);
-
-            $student = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($student) {
-
-                $account_found = true;
-
-                $stored_password = (string)($student["password"] ?? "");
-
-                $password_correct =
-                    password_verify($password, $stored_password)
-                    || hash_equals(
-                        $stored_password,
-                        $password
-                    );
-
-                if ($password_correct) {
-
-                    $_SESSION["username"] =
-                        $student["student_id"];
-
-                    $_SESSION["role"] = "student";
-
-                    $_SESSION["student_id"] =
-                        $student["student_id"];
-
-                    $_SESSION["student_name"] =
-                        $student["student_name"];
-
-                    $_SESSION["hostel_type"] =
-                        $student["hostel_type"];
-
-                    $_SESSION["email"] =
-                        $student["email"];
-
-                    $_SESSION["phone"] =
-                        $student["phone"];
-
-                    header(
-                        "Location: student/dashboard.php"
-                    );
-
-                    exit();
-                }
-            }
-
-        } catch (PDOException $e) {
-
-            $database_error = true;
+        html {
+            scroll-behavior: smooth;
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | WARDEN LOGIN
-        |--------------------------------------------------------------------------
-        */
-
-        try {
-
-            $stmt = $pdo->prepare("
-                SELECT
-                    warden_id,
-                    username,
-                    password,
-                    warden_name,
-                    gender,
-                    hostel_type,
-                    email,
-                    phone
-                FROM wardens
-                WHERE username = :username
-                LIMIT 1
-            ");
-
-            $stmt->execute([
-                ":username" => $username
-            ]);
-
-            $warden = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($warden) {
-
-                $account_found = true;
-
-                $stored_password =
-                    (string)($warden["password"] ?? "");
-
-                $password_correct =
-                    password_verify(
-                        $password,
-                        $stored_password
-                    )
-                    || hash_equals(
-                        $stored_password,
-                        $password
-                    );
-
-                if ($password_correct) {
-
-                    $_SESSION["username"] =
-                        $warden["username"];
-
-                    $_SESSION["role"] = "warden";
-
-                    $_SESSION["warden_id"] =
-                        $warden["warden_id"];
-
-                    $_SESSION["warden_name"] =
-                        $warden["warden_name"];
-
-                    $_SESSION["hostel_type"] =
-                        $warden["hostel_type"];
-
-                    $_SESSION["email"] =
-                        $warden["email"];
-
-                    $_SESSION["phone"] =
-                        $warden["phone"];
-
-                    header(
-                        "Location: warden/dashboard.php"
-                    );
-
-                    exit();
-                }
-            }
-
-        } catch (PDOException $e) {
-
-            $database_error = true;
+        body {
+            background-color: #f7f9fc;
+            color: #222;
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | MAINTENANCE LOGIN
-        |--------------------------------------------------------------------------
-        */
+        /* ================= NAVBAR ================= */
 
-        try {
+        nav {
+            height: 75px;
 
-            $stmt = $pdo->prepare("
-                SELECT
-                    maintenance_id,
-                    username,
-                    password,
-                    worker_name,
-                    role,
-                    phone,
-                    email
-                FROM maintenance_users
-                WHERE username = :username
-                LIMIT 1
-            ");
+            background-color: white;
 
-            $stmt->execute([
-                ":username" => $username
-            ]);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-            $maintenance =
-                $stmt->fetch(PDO::FETCH_ASSOC);
+            padding: 0 5%;
 
-            if ($maintenance) {
+            border-bottom: 1px solid #e5e5e5;
 
-                $account_found = true;
-
-                $stored_password =
-                    (string)($maintenance["password"] ?? "");
-
-                $password_correct =
-                    password_verify(
-                        $password,
-                        $stored_password
-                    )
-                    || hash_equals(
-                        $stored_password,
-                        $password
-                    );
-
-                if ($password_correct) {
-
-                    $_SESSION["username"] =
-                        $maintenance["username"];
-
-                    $_SESSION["role"] = "maintenance";
-
-                    $_SESSION["maintenance_id"] =
-                        $maintenance["maintenance_id"];
-
-                    $_SESSION["worker_name"] =
-                        $maintenance["worker_name"];
-
-                    $_SESSION["email"] =
-                        $maintenance["email"];
-
-                    $_SESSION["phone"] =
-                        $maintenance["phone"];
-
-                    header(
-                        "Location: maintenance/dashboard.php"
-                    );
-
-                    exit();
-                }
-            }
-
-        } catch (PDOException $e) {
-
-            $database_error = true;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | MANAGEMENT LOGIN
-        |--------------------------------------------------------------------------
-        */
+        /* ================= LOGO ================= */
 
-        try {
+        .brand {
+            display: flex;
+            align-items: center;
 
-            $stmt = $pdo->prepare("
-                SELECT
-                    management_id,
-                    username,
-                    password,
-                    management_name,
-                    email,
-                    phone
-                FROM management_users
-                WHERE username = :username
-                LIMIT 1
-            ");
-
-            $stmt->execute([
-                ":username" => $username
-            ]);
-
-            $management =
-                $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($management) {
-
-                $account_found = true;
-
-                $stored_password =
-                    (string)($management["password"] ?? "");
-
-                $password_correct =
-                    password_verify(
-                        $password,
-                        $stored_password
-                    )
-                    || hash_equals(
-                        $stored_password,
-                        $password
-                    );
-
-                if ($password_correct) {
-
-                    $_SESSION["username"] =
-                        $management["username"];
-
-                    $_SESSION["role"] = "management";
-
-                    $_SESSION["management_id"] =
-                        $management["management_id"];
-
-                    $_SESSION["management_name"] =
-                        $management["management_name"];
-
-                    $_SESSION["email"] =
-                        $management["email"];
-
-                    $_SESSION["phone"] =
-                        $management["phone"];
-
-                    header(
-                        "Location: management/dashboard.php"
-                    );
-
-                    exit();
-                }
-            }
-
-        } catch (PDOException $e) {
-
-            $database_error = true;
+            gap: 10px;
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | FINAL LOGIN RESULT
-        |--------------------------------------------------------------------------
-        */
+        .brand img {
+            width: 55px;
+            height: 55px;
 
-        if ($account_found) {
-
-            $error = "Invalid username or password.";
-
-        } elseif ($database_error) {
-
-            $error = "Unable to check user account. Please verify the database tables and columns.";
-
-        } else {
-
-            $error = "Invalid username or password.";
-
+            object-fit: contain;
         }
 
-    }
+
+        .brand-name {
+            font-size: 25px;
+
+            font-weight: bold;
+
+            color: #075894;
+        }
+
+
+        .brand-name span {
+            color: #ffb511;
+        }
+
+
+        /* ================= NAVIGATION ================= */
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+
+            gap: 30px;
+        }
+
+
+        .nav-links a {
+            text-decoration: none;
+
+            color: #444;
+
+            font-size: 15px;
+
+            font-weight: 500;
+
+            transition: 0.3s;
+        }
+
+
+        .nav-links a:hover {
+            color: #075894;
+        }
+
+
+        .login {
+            background-color: #075894;
+
+            color: white !important;
+
+            padding: 10px 22px;
+
+            border-radius: 5px;
+        }
+
+
+        .login:hover {
+            background-color: #064879;
+        }
+
+
+        /* ================= HOME / HERO ================= */
+
+        .hero {
+    min-height: 560px;
+
+    display: flex;
+    align-items: center;
+
+    padding: 70px 8%;
+
+    background-image: linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6)), url("images/hostel.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
-?>
+
+        .hero-content {
+            max-width: 680px;
+        }
+
+
+        /* Small heading */
+
+        .tag {
+
+            display: inline-block;
+
+            background-color: #e5f1f9;
+
+            color: #1f6fac;
+
+            padding: 8px 15px;
+
+            border-radius: 20px;
+
+            font-size: 13px;
+
+            margin-bottom: 20px;
+        }
+
+
+        /* Main heading */
+
+        .hero h1 {
+
+            font-size: 55px;
+
+            color: #0584e6;
+
+            margin-bottom: 10px;
+        }
+
+
+        .hero h2 {
+
+            font-size: 25px;
+
+            font-weight: normal;
+
+            color: #ebe8e8;
+
+            margin-bottom: 20px;
+        }
+
+
+        .hero p {
+
+            color: #e1d5d5;
+
+            font-size: 16px;
+
+            line-height: 1.7;
+
+            max-width: 570px;
+        }
+
+
+        /* ================= BUTTONS ================= */
+
+        .hero-buttons {
+
+            margin-top: 30px;
+        }
+
+
+        .primary-btn {
+
+            display: inline-block;
+
+            background-color: #075894;
+
+            color: white;
+
+            text-decoration: none;
+
+            padding: 13px 28px;
+
+            border-radius: 5px;
+
+            font-size: 14px;
+
+            transition: 0.3s;
+        }
+
+
+        .primary-btn:hover {
+
+            background-color: #064879;
+        }
+
+
+        .secondary-btn {
+
+            display: inline-block;
+
+            margin-left: 10px;
+
+            color: #0e81d9;
+
+            text-decoration: none;
+
+            padding: 13px 20px;
+
+            font-size: 14px;
+        }
+
+
+        .secondary-btn:hover {
+
+            color: #1e98f6;
+        }
+
+
+        /* ================= ABOUT SECTION ================= */
+
+        .about {
+
+            background-color: white;
+
+            padding: 70px 8%;
+
+            text-align: center;
+        }
+
+
+        .section-title {
+
+            color: #075894;
+
+            font-size: 32px;
+
+            margin-bottom: 15px;
+        }
+
+
+        .section-line {
+
+            width: 60px;
+
+            height: 3px;
+
+            background-color: #ffb511;
+
+            margin: 0 auto 25px auto;
+        }
+
+
+        .about-content {
+
+            max-width: 850px;
+
+            margin: auto;
+        }
+
+
+        .about-content p {
+
+            color: #666;
+
+            font-size: 16px;
+
+            line-height: 1.8;
+
+            margin-bottom: 15px;
+        }
+
+
+        /* ================= FEATURES SECTION ================= */
+
+        .features {
+
+            background-color: #f7f9fc;
+
+            padding: 70px 8%;
+
+            text-align: center;
+        }
+
+
+        .features-container {
+
+            display: flex;
+
+            justify-content: center;
+
+            gap: 30px;
+
+            margin-top: 40px;
+        }
+
+
+        .feature-box {
+
+            background-color: white;
+
+            width: 30%;
+
+            padding: 35px 25px;
+
+            border-radius: 8px;
+
+            border: 1px solid #e5e5e5;
+
+            transition: 0.3s;
+        }
+
+
+        .feature-box:hover {
+
+            transform: translateY(-5px);
+
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        }
+
+
+        .feature-number {
+
+            width: 50px;
+
+            height: 50px;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            margin: 0 auto 20px auto;
+
+            border-radius: 50%;
+
+            background-color: #e5f1f9;
+
+            color: #075894;
+
+            font-size: 20px;
+
+            font-weight: bold;
+        }
+
+
+        .feature-box h3 {
+
+            color: #075894;
+
+            font-size: 19px;
+
+            margin-bottom: 12px;
+        }
+
+
+        .feature-box p {
+
+            color: #777;
+
+            font-size: 14px;
+
+            line-height: 1.6;
+        }
+
+
+        /* ================= LOGIN SECTION ================= */
+
+        .login-section {
+
+            background-color: white;
+
+            padding: 60px 8%;
+
+            text-align: center;
+        }
+
+
+        .login-section p {
+
+            color: #666;
+
+            margin-bottom: 25px;
+
+            font-size: 15px;
+        }
+
+
+        /* ================= FOOTER ================= */
+
+        footer {
+
+            text-align: center;
+
+            padding: 20px;
+
+            background-color: #075894;
+
+            color: white;
+
+            font-size: 13px;
+        }
+
+
+        /* ================= MOBILE ================= */
+
+        @media (max-width: 700px) {
+
+
+            nav {
+
+                padding: 0 4%;
+            }
+
+
+            .brand-name {
+
+                font-size: 21px;
+            }
+
+
+            .brand img {
+
+                width: 45px;
+
+                height: 45px;
+            }
+
+
+            .nav-links {
+
+                gap: 8px;
+            }
+
+
+            .nav-links a:not(.login) {
+
+                display: none;
+            }
+
+
+            .hero {
+
+                padding: 70px 7%;
+
+                min-height: 500px;
+            }
+
+
+            .hero h1 {
+
+                font-size: 42px;
+            }
+
+
+            .hero h2 {
+
+                font-size: 21px;
+            }
+
+
+            .hero p {
+
+                font-size: 15px;
+            }
+
+
+            .hero-buttons {
+
+                display: flex;
+
+                flex-direction: column;
+
+                align-items: flex-start;
+
+                gap: 10px;
+            }
+
+
+            .secondary-btn {
+
+                margin-left: 0;
+            }
+
+
+            .features-container {
+
+                flex-direction: column;
+
+                align-items: center;
+            }
+
+
+            .feature-box {
+
+                width: 100%;
+
+                max-width: 400px;
+            }
+
+
+            .section-title {
+
+                font-size: 27px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- ================================================= -->
+    <!-- NAVBAR -->
+    <!-- ================================================= -->
+
+    <nav>
+
+
+        <!-- LOGO -->
+
+        <div class="brand">
+
+            <img
+                src="images/image.png"
+                alt="FixNest Logo"
+            >
+
+
+            <div class="brand-name">
+
+                Fix<span>Nest</span>
+
+            </div>
+
+        </div>
+
+
+        <!-- NAVIGATION -->
+
+        <div class="nav-links">
+
+
+            <a href="#home">
+                Home
+            </a>
+
+
+            <a href="#about">
+                About
+            </a>
+
+
+            <a href="#features">
+                Features
+            </a>
+
+
+            <a href="login.php" class="login">
+                Login
+            </a>
+
+
+        </div>
+
+
+    </nav>
+
+
+
+    <!-- ================================================= -->
+    <!-- HOME / HERO -->
+    <!-- ================================================= -->
+
+    <section class="hero" id="home">
+
+
+        <div class="hero-content">
+
+
+            <div class="tag">
+
+                Hostel Management System
+
+            </div>
+
+
+            <h1>
+
+                FixNest
+
+            </h1>
+
+
+            <h2>
+
+                Hostel Complaint Management System
+
+            </h2>
+
+
+            <p>
+
+                A simple and efficient platform for students
+                to report hostel complaints and for staff to
+                manage, track and resolve them.
+
+            </p>
+
+
+            <div class="hero-buttons">
+
+
+                <a
+                    href="login.php"
+                    class="primary-btn"
+                >
+
+                    Login to FixNest
+
+                </a>
+
+
+                <a
+                    href="#about"
+                    class="secondary-btn"
+                >
+
+                    Learn More →
+
+                </a>
+
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ================================================= -->
+    <!-- ABOUT SECTION -->
+    <!-- ================================================= -->
+
+    <section class="about" id="about">
+
+
+        <h2 class="section-title">
+
+            About FixNest
+
+        </h2>
+
+
+        <div class="section-line"></div>
+
+
+        <div class="about-content">
+
+
+            <p>
+
+                FixNest is a hostel complaint management
+                system developed to make the process of
+                reporting and handling hostel complaints
+                easier and more organized.
+
+            </p>
+
+
+            <p>
+
+                Students can submit complaints related to
+                hostel facilities and track their progress.
+                Wardens can review complaints, while
+                maintenance staff can handle and update
+                the complaints until they are resolved.
+
+            </p>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ================================================= -->
+    <!-- FEATURES SECTION -->
+    <!-- ================================================= -->
+
+    <section class="features" id="features">
+
+
+        <h2 class="section-title">
+
+            Features
+
+        </h2>
+
+
+        <div class="section-line"></div>
+
+
+        <div class="features-container">
+
+
+            <!-- FEATURE 1 -->
+
+            <div class="feature-box">
+
+
+                <div class="feature-number">
+
+                    1
+
+                </div>
+
+
+                <h3>
+
+                    Report Complaints
+
+                </h3>
+
+
+                <p>
+
+                    Students can easily submit complaints
+                    related to hostel rooms, facilities,
+                    electrical problems, plumbing and other
+                    hostel issues.
+
+                </p>
+
+
+            </div>
+
+
+
+            <!-- FEATURE 2 -->
+
+            <div class="feature-box">
+
+
+                <div class="feature-number">
+
+                    2
+
+                </div>
+
+
+                <h3>
+
+                    Track Progress
+
+                </h3>
+
+
+                <p>
+
+                    Students and staff can check the current
+                    status of complaints and follow their
+                    progress from submission to resolution.
+
+                </p>
+
+
+            </div>
+
+
+
+            <!-- FEATURE 3 -->
+
+            <div class="feature-box">
+
+
+                <div class="feature-number">
+
+                    3
+
+                </div>
+
+
+                <h3>
+
+                    Quick Resolution
+
+                </h3>
+
+
+                <p>
+
+                    Wardens and maintenance staff can review,
+                    assign and update complaints to help
+                    complete the work efficiently.
+
+                </p>
+
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ================================================= -->
+    <!-- LOGIN SECTION -->
+    <!-- ================================================= -->
+
+    <section class="login-section">
+
+
+        <h2 class="section-title">
+
+            Get Started with FixNest
+
+        </h2>
+
+
+        <div class="section-line"></div>
+
+
+        <p>
+
+            Login to access the hostel complaint management system.
+
+        </p>
+
+
+        <a
+            href="login.php"
+            class="primary-btn"
+        >
+
+            Login to FixNest
+
+        </a>
+
+
+    </section>
+
+
+
+    <!-- ================================================= -->
+    <!-- FOOTER -->
+    <!-- ================================================= -->
+
+    <footer>
+
+        © 2026 FixNest | Hostel Complaint Management System
+
+    </footer>
+
+
+</body>
+
+</html>

@@ -4,20 +4,13 @@ session_start();
 
 require_once __DIR__ . "/../includes/db.php";
 
+// Maintenance authentication
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "maintenance") {
     header("Location: ../index.php");
     exit();
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| Fetch Approved Complaints
-|--------------------------------------------------------------------------
-| Only complaints approved by the warden are shown to Maintenance.
-|--------------------------------------------------------------------------
-*/
-
+// Fetch approved complaints
 $sql = "SELECT
             c.complaint_id,
             c.student_id,
@@ -29,6 +22,7 @@ $sql = "SELECT
             c.severity,
             c.status,
             c.review_decision,
+            c.resolution_confirmation,
             c.created_at
         FROM complaints c
         LEFT JOIN students s
@@ -41,26 +35,39 @@ $stmt->execute();
 
 $complaints = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-
-/*
-|--------------------------------------------------------------------------
-| Statistics
-|--------------------------------------------------------------------------
-*/
-
+// Calculate counts
 $total_complaints = count($complaints);
 
 $not_started = 0;
 $in_progress = 0;
+$awaiting_confirmation = 0;
 $resolved = 0;
 
 foreach ($complaints as $complaint) {
 
-    if ($complaint["status"] === "Pending") {
+    $status = $complaint["status"] ?? "Pending";
+    $confirmation = $complaint["resolution_confirmation"] ?? "Pending";
+
+    if ($status === "Pending") {
+
         $not_started++;
-    } elseif ($complaint["status"] === "In Progress") {
+
+    } elseif ($status === "In Progress") {
+
         $in_progress++;
-    } elseif ($complaint["status"] === "Resolved") {
+
+    } elseif (
+        $status === "Resolved" &&
+        $confirmation === "Pending"
+    ) {
+
+        $awaiting_confirmation++;
+
+    } elseif (
+        $status === "Resolved" &&
+        $confirmation === "Confirmed"
+    ) {
+
         $resolved++;
     }
 }
@@ -273,6 +280,11 @@ foreach ($complaints as $complaint) {
             color: #1d4ed8;
         }
 
+        .awaiting {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         .resolved {
             background: #dcfce7;
             color: #166534;
@@ -421,7 +433,7 @@ foreach ($complaints as $complaint) {
 <div class="container">
 
 
-    <!-- PAGE HEADER -->
+    <!-- Page header -->
 
     <div class="page-header">
 
@@ -436,7 +448,7 @@ foreach ($complaints as $complaint) {
     </div>
 
 
-    <!-- STATISTICS -->
+    <!-- Statistics -->
 
     <div class="stats-grid">
 
@@ -495,15 +507,15 @@ foreach ($complaints as $complaint) {
         <div class="stat-card">
 
             <div class="stat-label">
-                Resolved
+                Awaiting Confirmation
             </div>
 
             <div class="stat-value">
-                <?= $resolved ?>
+                <?= $awaiting_confirmation ?>
             </div>
 
             <div class="stat-note">
-                Successfully completed
+                Waiting for warden confirmation
             </div>
 
         </div>
@@ -512,7 +524,7 @@ foreach ($complaints as $complaint) {
     </div>
 
 
-    <!-- COMPLAINT TABLE -->
+    <!-- Complaint table -->
 
     <div class="content-card">
 
@@ -583,28 +595,56 @@ foreach ($complaints as $complaint) {
 
                     <?php
 
+                    // Get status
                     $status = $complaint["status"] ?? "Pending";
 
+                    $confirmation =
+                        $complaint["resolution_confirmation"]
+                        ?? "Pending";
+
                     $status_class = "not-started";
+
+                    $status_text = "Not Started";
+
 
                     if ($status === "In Progress") {
 
                         $status_class = "progress";
 
-                    } elseif ($status === "Resolved") {
+                        $status_text = "In Progress";
+
+                    } elseif (
+                        $status === "Resolved" &&
+                        $confirmation === "Pending"
+                    ) {
+
+                        $status_class = "awaiting";
+
+                        $status_text = "Awaiting Warden Confirmation";
+
+                    } elseif (
+                        $status === "Resolved" &&
+                        $confirmation === "Confirmed"
+                    ) {
 
                         $status_class = "resolved";
+
+                        $status_text = "Resolved";
 
                     } elseif ($status === "Rejected") {
 
                         $status_class = "rejected";
 
+                        $status_text = "Rejected";
+
                     }
 
 
+                    // Get severity
                     $severity = $complaint["severity"] ?? "Low";
 
                     $priority_class = "priority-low";
+
 
                     if ($severity === "High") {
 
@@ -686,7 +726,7 @@ foreach ($complaints as $complaint) {
 
                             <span class="status-badge <?= $status_class ?>">
 
-                                <?= htmlspecialchars($status) ?>
+                                <?= htmlspecialchars($status_text) ?>
 
                             </span>
 
@@ -727,6 +767,9 @@ foreach ($complaints as $complaint) {
         Only complaints approved by the warden are displayed here.
         The Maintenance Head can review the complaint and manually assign
         the physical maintenance worker.
+
+        When maintenance marks a complaint as resolved,
+        the complaint is sent back to the warden for final confirmation.
 
     </div>
 

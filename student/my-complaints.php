@@ -72,6 +72,29 @@ if ($student_id !== "") {
             margin: 0;
             font-size: 22px;
         }
+        .back-dashboard {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: white;
+    color: #1d4ed8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-size: 22px;
+    font-weight: bold;
+    border: none;
+}
+
+.back-dashboard:hover {
+    background: #eff6ff;
+}
+.navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
 
         .logout {
             background: white;
@@ -249,7 +272,21 @@ if ($student_id !== "") {
 <body>
 
     <div class="navbar">
-        <h2>FixNest Student</h2>
+        <div class="navbar-left">
+
+        <a
+    class="back-dashboard"
+    href="dashboard.php"
+    title="Back to Dashboard"
+>
+    ←
+</a>
+
+        <h2>
+            FixNest Student
+        </h2>
+
+    </div>
         <a href="../index.php" class="logout">Logout</a>
     </div>
 
